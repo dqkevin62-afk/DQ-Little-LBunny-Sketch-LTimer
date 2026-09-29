@@ -1,0 +1,29 @@
+# 打包产物（exe 与中间文件，不要进仓库）
+dist/
+build/
+macos.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+
+# 桌宠运行时的浏览器独立配置 / 日志
+browser/
+*.log
+
+# 截图自查用过的 Chrome 配置目录（几百个缓存文件，不要进仓库）
+.chrome_shot/
+
+# 截图自查留下的临时文件
+desktop/_*.png
+_up_zoom.png
+_tmp_*.html
+_shot_*.html
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

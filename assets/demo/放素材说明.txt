@@ -1,0 +1,18 @@
+这个文件夹用来放教程里要用的演示素材：图片（png / jpg）、GIF 动图、短视频封面等。
+
+怎么用：
+1. 把素材直接丢进这个文件夹，例如  pose.gif 、 cloth.jpg
+2. 打开 assets/guides.js，找到对应分类，加一行 media（或改已有的 media），例如：
+
+   pose: {
+     ...
+     media: '<img src="assets/demo/pose.gif" alt="动态姿势演示">'
+   }
+
+3. 保存后刷新页面即可看到，GIF 会自动播放。
+
+也支持多张图或图文混排：
+   media: '<img src="assets/demo/a.gif"><img src="assets/demo/b.png">'
+
+不想改文件的话，也可以用页面上的「管理员 → 编辑本页」：
+在演示区直接粘贴 <img src="..."> 代码，或用「插入图片 / GIF」按钮上传本地文件 / 粘贴图片网址。

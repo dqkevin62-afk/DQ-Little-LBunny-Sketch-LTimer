@@ -1,0 +1,2721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DQ小兔速写计时姬 · 二次元美少女篇</title>
+<link rel="icon" href="assets/dq-chibi.png">
+<!-- 全项目唯一字体：本地内置的 MiSans Regular（小米免费商用字体，随项目分发、无需联网） -->
+<link rel="stylesheet" href="assets/fonts/misans.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* 配色：淡紫罗兰底 + 纯白卡片 + 紫罗兰强调（参考图风格）
+     变量名沿用旧的 --pink / --purple，别被名字误导：--pink 现在是主紫罗兰色。
+     原则不变：低饱和、低对比，画画长时间看不刺眼 */
+  :root {
+    --pink: #7f5fc0;                 /* 主强调色：紫罗兰（标题、按钮、选中态，配白字对比 5.5:1） */
+    --pink-soft: #ece5f8;            /* 主色浅底：淡紫 */
+    --purple: #9070cc;               /* 次强调：中紫（跳过按钮、次级选中） */
+    --purple-soft: #f3eefb;          /* 次色浅底 */
+    --lilac: #b39ae0;                /* 淡丁香：只做装饰（休息态计时环、柱状图），不承载文字 */
+    --caramel: #d9a94e;              /* 点缀金（参考图星星黄，用于里程碑等） */
+    --cream: #f5f1fc;                /* 卡片内的浅紫块 */
+    --ink: #3b3350;                  /* 深紫灰文字，不用纯黑 */
+    --muted: #8c82a3;                /* 灰紫说明文字 */
+    --bg: #efe8f9;                   /* 页面底色：淡紫罗兰 */
+    --bg-2: #e8dff5;                 /* 分区底色：略深 */
+    --card: #ffffff;                 /* 卡片：纯白（参考图主色块） */
+    --line: #e3d9f2;                 /* 极淡紫边线 */
+    --shadow: 0 6px 22px rgba(110, 84, 160, .10);
+  }
+  /* 唯一字体 MiSans Regular（小米 · 免费商用）由 assets/fonts/misans.css 内嵌引入，无需联网；
+     字体源文件也在 assets/fonts/ 下（.ttf / .woff2）。正文与标题同用这一个字重 */
+  :root {
+    --font-r: 'MiSans Regular', 'YouYuan', '幼圆', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --font-b: 'MiSans Regular', 'YouYuan', '幼圆', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+  /* 深色主题：深紫夜色（不是纯黑），低饱和，夜间画画不刺眼。
+     底色统一再降 30% 饱和度（HSL 的 S ×0.7，色相与明度不动）—— 底更"闷"，紫味收进背景里，
+     主色 / 文字 / 装饰色保持原来的紫，不跟着变灰。 */
+  [data-theme="dark"] {
+    --pink: #9f80e0; --pink-soft: #39324c; --purple: #9b86dd; --purple-soft: #352f49;
+    --lilac: #b9a5ec;
+    --caramel: #d4ab5e; --cream: #2c273c;
+    --ink: #eae4f5; --muted: #a49bbd;
+    --bg: #17141d; --bg-2: #201c2d; --card: #231f2d; --line: #363046;
+    --shadow: 0 6px 22px rgba(0, 0, 0, .32);
+  }
+  /* ---------- 参考图质感：淡紫底 + 白色柔光斑（仅浅色） ---------- */
+  html:not([data-theme="dark"]) body {
+    background-image:
+      radial-gradient(920px 520px at 6% -12%, rgba(255,255,255,.90), transparent 62%),
+      radial-gradient(760px 480px at 98% 0%, rgba(255,255,255,.55), transparent 58%),
+      radial-gradient(880px 560px at 50% 112%, rgba(255,255,255,.62), transparent 62%);
+    background-attachment: fixed;
+  }
+  /* 计时环：颜色跟随主题，不写死 */
+  .ring-track { stroke: var(--pink-soft); }
+  #ring { stroke: var(--pink); transition: stroke .35s ease; }
+  #ring.rest { stroke: var(--lilac); }
+  .opt-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .opt-item {
+    border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px;
+    cursor: pointer; background: var(--card); transition: all .15s;
+  }
+  .opt-item:hover { border-color: var(--pink); }
+  .opt-item.on { background: var(--purple-soft); border-color: var(--purple); }
+  /* 文字显式取变量：深色预览卡（自带 data-theme="dark"，会吃到深色主题变量）里的字才不会是深色 */
+  .opt-item .n { font-size: 14px; font-weight: 600; display: block; line-height: 1.5; color: var(--ink); }
+  .opt-item .dsc { font-size: 12px; color: var(--muted); margin-top: 5px; display: block; line-height: 1.6; }
+  body {
+    font-family: var(--font-r);
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+  }
+  button, input, select, textarea { font-family: inherit; }
+  h1, h2, .btn, .chip, .tab, .mini-btn, .ring-time .t, .stat-grid .num,
+  .welcome .big, .v-card .t, .hime-name, .set-title,
+  .prompt-box .txt, .ref-head h2, .bar-lbl { font-family: var(--font-b); }
+  #layout { display: flex; min-height: 100vh; }
+  /* ---------- 左侧菜单栏 ---------- */
+  #sidebar {
+    width: 320px; flex-shrink: 0; padding: 24px 20px;
+    background: var(--card); border-right: 1px solid var(--line);
+    height: 100vh; overflow-y: auto; position: sticky; top: 0;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 20px; padding: 16px; margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .card h2 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--pink); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row.three { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .row.three .chip { padding: 7px 4px; text-align: center; }
+  .card h2 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mini-btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--pink);
+    border-radius: 999px; padding: 3px 12px; font-size: 12px; cursor: pointer;
+    font-family: inherit; transition: all .15s;
+  }
+  .mini-btn:hover { border-color: var(--pink); background: var(--pink-soft); }
+  .mini-btn.ok { background: var(--pink); color: #fff; border-color: var(--pink); }
+  .custom-box { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .custom-box input, .custom-box select {
+    font-family: inherit; font-size: 13px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 8px; color: var(--ink); background: var(--card);
+  }
+  .custom-box input { width: 72px; }
+  .custom-box select { flex: 1; }
+  .chip {
+    border: 1.5px solid var(--line); background: var(--card); color: var(--ink);
+    border-radius: 999px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+    transition: all .15s;
+  }
+  .chip:hover { border-color: var(--pink); }
+  .chip.on { background: var(--pink); border-color: var(--pink); color: #fff; }
+  .chip.on.purple { background: var(--purple); border-color: var(--purple); }
+  /* 标签页：与下方圆角按钮做视觉区分 */
+  .tabs {
+    display: flex; gap: 4px; padding: 4px; margin-bottom: 14px;
+    background: var(--pink-soft); border-radius: 12px; border: 1px solid var(--line);
+  }
+  .tab {
+    flex: 1; border: none; background: transparent; color: var(--muted);
+    padding: 9px 6px; font-size: 14px; font-family: inherit; cursor: pointer;
+    border-radius: 9px; transition: all .15s;
+  }
+  .tab:hover { color: var(--pink); }
+  .tab.on { background: var(--card); color: var(--pink); font-weight: 600; box-shadow: 0 1px 4px rgba(120, 92, 176, .16); }
+  .btn {
+    display: block; width: 100%; border: none; border-radius: 999px;
+    padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer;
+    background: var(--pink); color: #fff; transition: opacity .15s;
+    box-shadow: 0 4px 14px rgba(104, 76, 158, .22);
+  }
+  .btn:hover { opacity: .88; }
+  .btn.ghost { box-shadow: none; }
+  .btn.purple { box-shadow: 0 4px 14px rgba(104, 76, 158, .18); }
+  .btn.ghost { background: var(--pink-soft); color: var(--pink); }
+  .btn.purple { background: var(--purple); }
+  #screen-ref .ref-frame {
+    width: 800px; max-width: 100%; height: 600px; margin: 0 auto;
+    border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+    background: var(--cream);
+  }
+  #screen-ref .ref-frame iframe { width: 100%; height: 100%; border: 0; }
+  #screen-ref .ref-tip { text-align: center; color: var(--muted); font-size: 13px; margin: 14px 0; }
+  #screen-ref .ref-tip a { color: var(--purple); }
+  #screen-ref .ref-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  #screen-ref .ref-head h2 { font-size: 16px; font-weight: 600; color: var(--pink); }
+  #screen-ref .v-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  #screen-ref .v-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; cursor: pointer; transition: all .15s; display: block; text-align: left;
+  }
+  #screen-ref .v-card:hover { border-color: var(--purple); background: var(--purple-soft); }
+  #screen-ref .v-card .t { font-size: 14px; font-weight: 500; line-height: 1.5; margin-bottom: 8px; }
+  #screen-ref .v-card .m { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  #screen-ref .v-card .m .dur { color: var(--purple); }
+  @media (max-width: 860px) { #screen-ref .v-list { grid-template-columns: 1fr; } }
+  .upload-zone {
+    /* 大号圆角正方形：宽高 1:1，实线深边，文字垂直居中 */
+    aspect-ratio: 1 / 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    border: 2.5px solid var(--purple); border-radius: 22px;
+    background: var(--card); padding: 18px; box-sizing: border-box;   /* 跟随主题：深色下不再是一块白 */
+    text-align: center; color: var(--purple); font-size: 15px; cursor: pointer;
+    position: relative; overflow: hidden;   /* 预览图铺满方框，圆角内裁掉 */
+  }
+  .upload-zone .up-main { font-size: 16px; font-weight: 600; line-height: 1.5; }
+  .upload-zone .up-sub { font-size: 12px; color: var(--muted); }
+  .upload-zone:hover { border-color: var(--pink); color: var(--pink); }
+  /* 空态文案：有图时整块隐藏，让位给预览 */
+  .upload-zone .up-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  /* 方框内的参考图预览：选完立刻替换显示，完整显示不裁切 */
+  /* ⚠️ 必须写死 width/height：只给四边偏移的话，img 这种替换元素会按图片原始尺寸
+     渲染（宽度 auto 时忽略 right），窄侧栏里就变成右边被裁掉一块 */
+  .upload-zone .up-preview {
+    position: absolute; left: 8px; top: 8px;
+    width: calc(100% - 16px); height: calc(100% - 16px);
+    max-width: none; object-fit: contain;
+    border-radius: 13px; display: block;
+  }
+  /* 预览左下角的「第 x / y 张」小条 */
+  .upload-zone .up-hint {
+    position: absolute; left: 12px; bottom: 10px;
+    font-size: 11px; line-height: 1.5; color: var(--muted);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 9px;
+  }
+  .upload-zone.has-img { border-style: solid; }
+  /* ✕ 的定位参照物：方框是 #upload-wrap 的第一个子元素，wrap 的右上角就是方框右上角 */
+  #upload-wrap { position: relative; }
+  /* 预览图右上角的 ✕：随时删掉这张、重新选
+     ⚠️ 它在 <label> 外面（放在 label 里会抢走点击目标，见 #upload-zone 那句注释） */
+  #upload-wrap .up-del {
+    position: absolute; top: 10px; right: 10px; z-index: 3;
+    width: 26px; height: 26px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; border: 1px solid var(--line);
+    background: var(--card); color: var(--muted);
+    font-size: 13px; line-height: 1; cursor: pointer; transition: all .15s;
+  }
+  #upload-wrap .up-del:hover { border-color: var(--pink); color: var(--pink); }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; }
+  .stat-grid .num { font-size: 22px; font-weight: 600; color: var(--pink); }
+  .stat-grid .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* ---------- 每日打卡（当天画满 1 小时 = 点亮一颗 ★） ---------- */
+  .dk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .dk-top .dk-m { font-size: 12px; color: var(--muted); }
+  .dk-top .dk-n { font-size: 12px; color: var(--muted); }
+  .dk-top .dk-n b { font-size: 22px; font-weight: 600; color: var(--pink); margin-right: 3px; }
+  .dk-prog { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.7; }
+  .dk-prog b { color: var(--pink); font-weight: 600; }
+  .dk-bar {
+    height: 8px; border-radius: 999px; background: var(--purple-soft);
+    overflow: hidden; border: 1px solid var(--line); margin: 6px 0 12px;
+  }
+  .dk-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--pink); }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
+  .cal-cell {
+    aspect-ratio: 1 / 1; border-radius: 8px; padding: 1px 0;
+    border: 1px solid var(--line); background: var(--card);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    line-height: 1; color: var(--line);
+  }
+  .cal-cell .d { font-size: 9.5px; color: var(--muted); }
+  .cal-cell .s { font-size: 13px; line-height: 1.1; }
+  .cal-cell.on .d { color: var(--pink); }
+  .cal-cell.on { background: var(--pink-soft); border-color: var(--pink); color: var(--pink); }
+  .cal-cell.void { opacity: .35; }                     /* 本月没有这一天（例如 2 月 30 日） */
+  .cal-cell.today { border-color: var(--purple); box-shadow: 0 0 0 1.5px var(--purple-soft); }
+  /* ---------- 星级成就体系 ---------- */
+  .star-box { margin-bottom: 10px; }
+  .star-panel { margin: 18px 0 4px; }
+  .star-line { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .star-icons { font-size: 24px; letter-spacing: 3px; color: var(--pink); line-height: 1; }
+  .star-icons .off { color: var(--line); }
+  .star-name {
+    font-size: 15px; font-weight: 600; color: var(--pink);
+    background: var(--pink-soft); border-radius: 999px; padding: 4px 14px;
+  }
+  .star-wrap { display: flex; align-items: center; gap: 6px; }
+  .star-bar {
+    flex: 1; height: 8px; border-radius: 999px; background: var(--purple-soft);
+    overflow: hidden; border: 1px solid var(--line);
+  }
+  .star-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--pink); }
+  .star-tip { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; line-height: 1.7; }
+  .star-panel .star-icons { font-size: 34px; }
+  /* 得星规则说明（点打卡标题旁的 ❗️ 展开） */
+  .dk-head { flex-wrap: wrap; }
+  .rule-box {
+    margin-bottom: 12px; padding: 12px 14px; border-radius: 12px;
+    background: var(--cream); border: 1px dashed var(--line);
+    font-size: 12px; color: var(--ink); line-height: 1.85;
+  }
+  .rule-box .rt { font-size: 13px; font-weight: 600; color: var(--pink); margin-bottom: 6px; }
+  .rule-box .rf {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 10px; margin: 6px 0 9px; font-size: 12px; color: var(--pink);
+  }
+  .rule-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  .rule-row .rs { flex-shrink: 0; letter-spacing: 1px; color: var(--pink); }
+  .rule-row .rs .off { color: var(--line); }
+  .rule-row .rn { flex: 1; }
+  .rule-row .rv { color: var(--muted); flex-shrink: 0; }
+  .rule-ul { margin-top: 8px; color: var(--muted); font-size: 11.5px; }
+  .rule-now {
+    margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line);
+    font-size: 11.5px; color: var(--pink);
+  }
+  /* 分享 */
+  .share-box {
+    margin: 18px 0 4px; padding: 14px; border-radius: 16px;
+    background: var(--cream); border: 1px solid var(--line);
+  }
+  .share-t { font-size: 13px; font-weight: 600; color: var(--pink); text-align: center; margin-bottom: 10px; }
+  .share-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .share-status { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; min-height: 16px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin-top: 12px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .bar { width: 100%; border-radius: 6px 6px 0 0; background: var(--pink); min-height: 3px; opacity: .85; }
+  .bar.today { background: var(--purple); }
+  .bar-lbl { font-size: 10px; color: var(--muted); }
+  footer { color: var(--muted); font-size: 11px; margin-top: 4px; text-align: center; }
+  /* ---------- 右侧画布区 ---------- */
+  #main {
+    flex: 1; padding: 32px; display: flex;
+    align-items: center; justify-content: center;
+  }
+  .stage { width: 100%; max-width: 720px; }
+  /* 参考图的「设备框」质感：白色厚内框 + 一圈极淡紫描边 + 柔和长投影 */
+  .stage.card {
+    padding: 28px; border-radius: 28px; border: 7px solid var(--card);
+    box-shadow: 0 0 0 1.5px var(--line), 0 16px 44px rgba(104, 76, 158, .16);
+  }
+  .ring-wrap { position: relative; width: 260px; height: 260px; margin: 8px auto 20px; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-time {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .ring-time .t { font-size: 52px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ring-time .p { font-size: 14px; color: var(--muted); }
+  /* 不计时：隐藏计时环，中央只显示「自由练习」 */
+  .ring-wrap.timer-off svg { display: none; }
+  .ring-wrap.timer-off .ring-time .t { font-size: 38px; }
+  .prompt-box {
+    min-height: 160px; border-radius: 18px;
+    background: linear-gradient(150deg, var(--pink-soft) 0%, var(--purple-soft) 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; margin-bottom: 20px; overflow: hidden;
+  }
+  .prompt-box .cat { font-size: 13px; color: var(--purple); display: block; margin-bottom: 8px; }
+  .prompt-box .txt { font-size: 20px; line-height: 1.7; font-weight: 500; }
+  .prompt-box img { max-width: 100%; max-height: 55vh; border-radius: 10px; }
+  /* 进度条：参考图里的胶囊小标签质感 */
+  .progress-line {
+    display: block; width: fit-content; margin: 0 auto 16px;
+    font-size: 13px; color: var(--pink); font-weight: 500;
+    background: var(--pink-soft); border-radius: 999px; padding: 6px 18px;
+  }
+  .ctrls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .rest-note { color: var(--purple); font-weight: 600; }
+  #screen-summary .stat-grid .num { font-size: 52px; }
+  #screen-summary .stat-grid { margin: 8px 0 4px; }
+  /* 设置页：标题居中（.card h2 是 flex + space-between，会把标题挤到左边），
+     与下面标签栏留 14px，跟页内其它间距保持同一节奏 */
+  #screen-settings > h2 { justify-content: center; margin-bottom: 14px; }
+  .set-block { margin: 20px 0; }
+  .set-title { font-size: 15px; font-weight: 600; color: var(--pink); margin-bottom: 8px; }
+  .set-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 14px; }
+  /* 「给 DQ 提建议」标题下面那几行联系方式（跟着主色走，不写死颜色） */
+  .set-qq { font-size: 13px; font-weight: 600; color: var(--pink); margin: -2px 0 10px; }
+  .voice-note { font-size: 12px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+  .ref-link {
+    display: block; border: 1.5px dashed var(--line); border-radius: 10px;
+    padding: 10px 12px; font-size: 13px; color: var(--purple);
+    text-decoration: none; text-align: center; transition: all .15s;
+  }
+  .ref-link:hover { border-color: var(--purple); background: var(--purple-soft); }
+  .thumb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .thumb-grid img {
+    width: 100%; height: 64px; object-fit: cover; border-radius: 8px;
+    border: 2px solid var(--line); cursor: pointer; display: block;
+  }
+  .thumb-grid img:hover { border-color: var(--pink); }
+  .thumb-grid img.on { border-color: var(--purple); }
+  /* 参考图缩略图：右上角常驻「✕」删除按钮 */
+  .thumb-cell { position: relative; display: block; line-height: 0; }
+  .thumb-del {
+    position: absolute; top: 3px; right: 3px;
+    width: 19px; height: 19px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; border: 1px solid var(--line);
+    background: var(--card); color: var(--pink);   /* 跟随主题（原来写死半透明白，深色下也是一块白） */
+    font-size: 11px; line-height: 1; cursor: pointer;
+    transition: all .15s;
+  }
+  .thumb-del:hover { background: var(--pink); color: #fff; border-color: var(--pink); }
+  /* CSI 线条训练 · 小字说明 */
+  .guide-note {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--purple-soft); padding: 12px 14px;
+  }
+  .guide-note h3 { font-size: 12.5px; color: var(--pink); margin-bottom: 4px; }
+  .guide-note p { font-size: 11.5px; color: var(--muted); line-height: 1.75; }
+  .guide-note ul { margin: 4px 0 0 15px; }
+  .guide-note li { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin-bottom: 3px; }
+  .guide-note .csi-sec { margin-top: 10px; }
+  .guide-note svg { display: block; width: 100%; height: auto; margin-top: 6px; }
+  .guide-note .ref-link { font-size: 12px; margin-top: 0; }
+  .guide-note .csi-tip { margin-top: 8px; font-size: 11px; opacity: .85; }
+  /* 画布版（右侧大区域）：更大更易读 */
+  #screen-guide { padding: 26px 30px 30px; }
+  #screen-guide .guide-note { background: transparent; border: 0; padding: 0; margin: 0; }
+  #screen-guide .csi-title { font-size: 20px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  #screen-guide .csi-sub { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  #screen-guide .guide-note h3 { font-size: 15px; margin: 20px 0 6px; }
+  #screen-guide .guide-note p,
+  #screen-guide .guide-note li { font-size: 14px; color: var(--ink); line-height: 1.9; }
+  #screen-guide .guide-note .csi-lead { color: var(--muted); }
+  #screen-guide .guide-note ul { margin: 6px 0 0 20px; }
+  #screen-guide .guide-note li { margin-bottom: 5px; }
+  #screen-guide .guide-note svg { max-width: 460px; margin: 12px auto 0; }
+  #screen-guide .guide-note .ref-link { font-size: 14px; padding: 12px 14px; }
+  #screen-guide .guide-note .csi-tip { font-size: 13px; }
+  #screen-guide > .btn { display: block; width: auto; margin: 26px auto 0; padding: 13px 52px; }
+  /* 教程页：管理员区与编辑面板 */
+  .guide-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .guide-admin { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .edited-tag { font-size: 11px; color: var(--purple); background: var(--purple-soft); border-radius: 8px; padding: 3px 8px; }
+  .mini-btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .guide-media { margin-top: 4px; }
+  .guide-media img { max-width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; margin: 0 auto; }
+  .guide-media svg { max-width: 460px; margin: 0 auto; }
+  .ed-row { margin-bottom: 14px; }
+  .ed-row > label { display: block; font-size: 12px; color: var(--pink); margin-bottom: 5px; }
+  .ed-row input[type="text"], .ed-row input:not([type]), .ed-row textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px;
+    font-size: 13px; color: var(--ink); background: var(--bg); font-family: inherit; line-height: 1.7;
+  }
+  .ed-row textarea { min-height: 76px; resize: vertical; }
+  .ed-row textarea.tall { min-height: 130px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .ed-inline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ed-inline input[type="text"], .ed-inline input:not([type="file"]) { flex: 1 1 220px; min-width: 180px; }
+  .ed-or, .ed-hint { font-size: 11px; color: var(--muted); }
+  .ed-preview { margin-top: 8px; }
+  .ed-preview img { max-width: 200px; border-radius: 8px; border: 1px solid var(--line); }
+  /* 给 DQ 提建议 */
+  #suggest-text {
+    width: 100%; min-height: 150px; resize: vertical;
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    font-size: 14px; line-height: 1.8; color: var(--ink); background: var(--bg);
+  }
+  .suggest-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .suggest-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .suggest-actions .btn { margin-top: 0; width: auto; padding: 11px 30px; }
+  .suggest-status { margin-top: 12px; font-size: 13px; line-height: 1.75; padding: 11px 13px; border-radius: 10px; }
+  .suggest-status.ok { background: var(--purple-soft); color: var(--purple); }
+  .suggest-status.err { background: var(--pink-soft); color: var(--pink); }
+  .suggest-status.wait { background: var(--bg); color: var(--muted); border: 1px dashed var(--line); }
+  .admin-only { width: 100%; margin-top: 10px; }
+  /* 两张卡片都固定展开：没有折叠、没有箭头、也没有选中高亮（2026-09-29 定） */
+  .mode-card { cursor: default; border: 1.5px solid var(--line); }
+  .mode-card h2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .mode-flag { display: none; }
+  .mode-card .mode-body { display: block; margin-top: 10px; cursor: default; }
+  /* 上传区拖拽高亮 */
+  .upload-zone.drag { border-color: var(--pink); background: var(--purple-soft); }
+  /* 一个卡片里的小分段（单张时长 / 练习张数） */
+  .set-group + .set-group,
+  .opt-list + .set-group {                 /* 主题卡下面接分段时也要有间距（原来漏了这条，会贴在一起） */
+    margin-top: 16px; padding-top: 15px; border-top: 1px dashed var(--line);
+  }
+  .set-group > .set-desc:last-child { margin-bottom: 0; }   /* 分段末尾的说明不留多余空白 */
+  .set-group-t {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: 12.5px; font-weight: 600; color: var(--pink); margin-bottom: 10px;
+  }
+  /* 设置页里的「开 / 关」做成等宽胶囊，两枚按钮对齐 */
+  #pet-top-row { gap: 10px; }
+  #pet-top-row .chip { min-width: 64px; padding: 8px 0; text-align: center; }
+  /* ---------- 左侧菜单栏：紧凑排版（只作用于侧栏，不影响右侧画布） ---------- */
+  #sidebar { padding: 14px 16px; }
+  /* 标题比原来长了 3 个字（多了「小兔」），字号相应收一点，
+     保证标题 + 版本号能在 320px 侧栏里排成一行不折行 */
+  #sidebar h1 { font-size: 16px; margin-bottom: 2px; white-space: nowrap; }
+  /* 标题旁的小小版本号 */
+  #sidebar h1 .ver {
+    font-size: 10px; font-weight: 400; color: var(--muted);
+    margin-left: 5px; vertical-align: 2px; letter-spacing: .5px;
+    opacity: .85; white-space: nowrap;
+  }
+  #sidebar .sub { margin-bottom: 10px; }
+  #sidebar .card { padding: 11px 13px; margin-bottom: 9px; border-radius: 13px; }
+  #sidebar .card h2 { margin-bottom: 7px; }
+  #sidebar .row { gap: 6px; }
+  #sidebar .chip { padding: 5px 11px; font-size: 12.5px; }
+  #sidebar .row.three { gap: 6px; }
+  #sidebar .row.three .chip { padding: 6px 4px; }
+  #sidebar .btn { padding: 10px; font-size: 14px; border-radius: 999px; }
+  #sidebar .btn.ghost { margin-top: 6px; }
+  #sidebar .custom-box { margin-top: 8px; gap: 6px; }
+  #sidebar .set-desc { margin-bottom: 9px; line-height: 1.6; }
+  #sidebar .set-group + .set-group { margin-top: 8px; padding-top: 8px; }
+  #sidebar .set-group-t { margin-bottom: 5px; }
+  #sidebar .admin-only { margin-top: 8px; padding: 9px; }
+  #sidebar .thumb-grid { margin-top: 8px; gap: 6px; }
+  #sidebar .thumb-grid img { height: 56px; }
+  #sidebar .stat-grid { margin-top: 2px; }
+  #sidebar .stat-grid .num { font-size: 20px; }
+  #sidebar .bars { height: 66px; margin-top: 9px; }
+  #sidebar footer { margin-top: 2px; }
+  @media (max-width: 860px) { #screen-guide { padding: 20px 16px 24px; } }
+  #welcome-img { text-align: center; margin-bottom: 20px; }
+  #welcome-img img { max-width: 100%; max-height: 42vh; border-radius: 12px; border: 1px solid var(--line); }
+  .welcome { text-align: center; color: var(--muted); }
+  .welcome .big { font-size: 22px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
+  .welcome p { font-size: 14px; line-height: 1.9; }
+  .sb-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .sb-head h1 { margin-bottom: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    object-fit: cover; object-position: center 12%;
+    background: var(--card); border: 1.5px solid var(--line);
+  }
+  .hime-img {
+    display: block; margin: 0 auto 20px; max-height: 34vh;
+    border-radius: 16px; border: 1px solid var(--line);
+  }
+  .hime-name { text-align: center; font-size: 13px; color: var(--pink); margin: -12px 0 16px; letter-spacing: 1px; }
+  /* 展示参考图时，小兔形象（图 + 署名）让位，只留参考图；下面的文字块照常显示。
+     选择器要带 #screen-welcome 提升优先级，否则被上面的 .hime-img{display:block} 盖掉 */
+  #screen-welcome .hime-img[hidden], #screen-welcome .hime-name[hidden] { display: none; }
+  #btn-expand {
+    position: fixed; top: 16px; left: 16px; z-index: 10; display: none;
+    box-shadow: 0 2px 10px rgba(120, 92, 176, .22);
+  }
+  #sidebar.hidden-sb { display: none; }
+  body.sb-collapsed #btn-expand { display: block; }
+  #btn-welcome-start { display: none; width: auto; margin: 24px auto 0; padding: 13px 48px; }
+  body.sb-collapsed #btn-welcome-start { display: block; }
+  /* 参考图已上屏时，欢迎屏也出现「开始练习」（纯净参考图模式入口） */
+  #welcome-img:not([hidden]) ~ .welcome #btn-welcome-start { display: block; }
+  @media (max-width: 860px) {
+    #layout { flex-direction: column; }
+    #sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--line); }
+    #main { padding: 20px 16px; }
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<button id="btn-expand" class="chip">展开设置</button>
+<div id="layout">
+  <!-- 左侧菜单栏 -->
+  <aside id="sidebar">
+    <div class="sb-head">
+      <img class="avatar" src="assets/dq-chibi.png" alt="小兔 Q版形象">
+      <h1>DQ小兔速写计时姬<span class="ver">V1.0.0</span></h1>
+      <button id="btn-settings" class="chip">收起</button>
+    </div>
+    <p class="sub">二次元美少女专项 · 每天坚持速写 1~2 小时即可</p>
+    <div class="card mode-card" id="practice-settings-card">
+      <h2>练习设置</h2>
+      <div class="mode-body">
+      <div class="set-group">
+        <div class="set-group-t">单张时长 <button class="mini-btn" id="btn-custom-dur">自定义</button></div>
+        <div class="row three" id="dur-row">
+          <button class="chip" data-dur="30">30 秒</button>
+          <button class="chip on" data-dur="60">1 分钟</button>
+          <button class="chip" data-dur="300">5 分钟</button>
+          <button class="chip" data-dur="600">10 分钟</button>
+          <button class="chip" data-dur="900">15 分钟</button>
+          <button class="chip" data-dur="1800">30 分钟</button>
+        </div>
+        <div class="custom-box" id="dur-custom" hidden>
+          <input type="number" id="dur-input" min="1" max="120" value="3" inputmode="numeric">
+          <select id="dur-unit">
+            <option value="60">分钟</option>
+            <option value="1">秒</option>
+          </select>
+          <button class="mini-btn ok" id="btn-dur-apply">确定</button>
+        </div>
+        <p class="set-desc" id="dur-note" hidden></p>
+      </div>
+      <div class="set-group">
+        <div class="set-group-t">练习张数 <button class="mini-btn" id="btn-custom-cnt">自定义</button></div>
+        <div class="row three" id="cnt-row">
+          <button class="chip" data-cnt="5">5 张</button>
+          <button class="chip on" data-cnt="10">10 张</button>
+          <button class="chip" data-cnt="20">20 张</button>
+          <button class="chip" data-cnt="30">30 张</button>
+          <button class="chip" data-cnt="50">50 张</button>
+          <button class="chip" data-cnt="100">超人100张</button>
+        </div>
+        <div class="custom-box" id="cnt-custom" hidden>
+          <input type="number" id="cnt-input" min="1" max="200" value="15" inputmode="numeric">
+          <span class="set-desc" style="margin:0">张</span>
+          <button class="mini-btn ok" id="btn-cnt-apply">确定</button>
+        </div>
+        <p class="set-desc" id="cnt-note" hidden></p>
+      </div>
+      <div class="set-group">
+        <div class="set-group-t">计时方式</div>
+        <div class="row three" id="timing-row">
+          <button class="chip on" data-timing="down">倒计时</button>
+          <button class="chip" data-timing="up">正向计时</button>
+          <button class="chip" data-timing="none">不计时</button>
+        </div>
+        <p class="set-desc" id="timing-note">倒计时：到点自动切换，最后 10 秒冲刺提示</p>
+      </div>
+      </div>
+    </div>
+    <div class="card mode-card" id="mode-image-card" data-mode="image">
+      <h2>打开本地参考图</h2>
+      <div class="mode-body">
+      <div id="upload-wrap">
+        <!-- ⚠️ 方框本体是 <label>：而 <button> 同样属于「可关联控件」，放在 label 里会
+             抢走点击目标 —— 点方框就变成点 ✕，文件选择框再也弹不出来（2026-09-29 踩）。
+             所以 ✕ 必须放在 label 外面，同时用 for="file-input" 把方框和文件框显式绑死。 -->
+        <label class="upload-zone" id="upload-zone" for="file-input">
+          <span class="up-empty" id="up-empty">
+            <span class="up-main">点击上传 / 把图片拖进来 / Ctrl+V 粘贴</span>
+            <span class="up-sub">一次最多 9 张，练习时随机轮播</span>
+          </span>
+          <img class="up-preview" id="up-preview" alt="参考图预览" decoding="async" hidden>
+          <span class="up-hint" id="up-hint" hidden></span>
+          <input type="file" id="file-input" accept="image/*" multiple hidden>
+        </label>
+        <button type="button" class="up-del" id="up-del" hidden
+                title="删掉这张参考图，重新选" aria-label="删掉这张参考图">✕</button>
+        <p id="upload-info" class="sub" style="margin:8px 0 0"></p>
+        <div class="thumb-grid" id="thumb-grid"></div>
+      </div>
+      </div>
+    </div>
+    <button class="btn" id="btn-start">开始练习</button>
+    <div class="card" style="margin-top:14px">
+      <h2 class="dk-head">我的DQ小兔速写打卡 <button class="mini-btn" id="btn-star-rule">打卡规则 ❗️</button></h2>
+      <div class="rule-box" id="star-rule" hidden></div>
+      <div class="dk-top">
+        <span class="dk-m" id="dk-month">—</span>
+        <span class="dk-n"><b id="dk-days">0</b>本月打卡天数</span>
+      </div>
+      <div class="dk-prog" id="dk-prog">今天还没开始画</div>
+      <div class="dk-bar"><i id="dk-bar" style="width:0%"></i></div>
+      <div class="cal" id="cal"></div>
+      <div class="stat-grid">
+        <div><div class="num" id="st-today">0</div><div class="lbl">今日张数</div></div>
+        <div><div class="num" id="st-streak">0</div><div class="lbl">连续天数</div></div>
+        <div><div class="num" id="st-total">0</div><div class="lbl">累计张数</div></div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <button class="btn ghost" id="btn-open-settings" style="margin-top:6px">设置</button>
+    <footer>练习数据全部保存在本地浏览器</footer>
+  </aside>
+  <!-- 右侧画布区 -->
+  <main id="main">
+    <!-- 欢迎页 -->
+    <section id="screen-welcome" class="stage">
+      <div id="welcome-img" hidden><img id="welcome-img-el" src="" alt="参考图"></div>
+      <img class="hime-img" src="assets/dq-timer-hime.jpg" alt="小兔 角色形象">
+      <p class="hime-name">DQ小兔速写计时姬</p>
+      <div class="welcome">
+        <div class="big">小兔陪你练速写啦~</div>
+        <p>在左侧上传参考图，再选好时长和张数<br>点击「开始练习」，参考图会出现在这里<br>快写热身用 30 秒~1 分钟，深入刻画用 10 分钟以上</p>
+        <button class="btn" id="btn-welcome-start">开始练习</button>
+      </div>
+    </section>
+    <!-- CSI 线条训练说明页（点击左侧「CSI线条」分类时显示） -->
+    <section id="screen-guide" class="stage card" hidden>
+      <div class="guide-note" id="guide-note"></div>
+      <button class="btn" id="btn-guide-start">开始练习</button>
+    </section>
+    <!-- 管理员维护页（在分类教程页点「管理员」输入口令后可进） -->
+    <section id="screen-admin" class="stage card" hidden>
+      <div class="guide-head">
+        <div>
+          <div class="csi-title">管理员维护</div>
+          <div class="csi-sub">输入过管理员口令（本机记住）后才可进</div>
+        </div>
+        <div class="guide-admin">
+          <button class="mini-btn ghost" id="btn-admin-back">返回</button>
+        </div>
+      </div>
+      <div class="ed-row"><label>维护哪个分类</label>
+        <select id="ad-cat"></select>
+      </div>
+      <div class="ed-row"><label>题库题目（一行一条）</label>
+        <textarea id="ad-topics" class="tall"></textarea></div>
+      <div class="guide-admin">
+        <button class="mini-btn ok" id="btn-ad-save">保存题目</button>
+        <button class="mini-btn" id="btn-ad-reset">恢复默认题目</button>
+        <button class="mini-btn" id="btn-ad-guide">编辑本类教程</button>
+      </div>
+      <p class="voice-note" id="ad-note" style="margin-top:8px"></p>
+    </section>
+
+    <!-- 练习页 -->
+    <section id="screen-practice" class="stage card" hidden>
+      <div class="progress-line" id="prog-line">第 1 / 10 张</div>
+      <div class="prompt-box" id="prompt-box">
+        <div><span class="cat" id="p-cat"></span><span class="txt" id="p-txt"></span></div>
+      </div>
+      <div class="ring-wrap">
+        <svg width="260" height="260">
+          <circle class="ring-track" cx="130" cy="130" r="115" fill="none" stroke-width="10"/>
+          <circle id="ring" cx="130" cy="130" r="115" fill="none"
+                  stroke-width="10" stroke-linecap="round" stroke-dasharray="722.6" stroke-dashoffset="0"/>
+        </svg>
+        <div class="ring-time">
+          <div class="t" id="time-text">60</div>
+          <div class="p" id="phase-text">绘制中</div>
+        </div>
+      </div>
+      <div class="ctrls">
+        <button class="btn ghost" id="btn-pause">暂停</button>
+        <button class="btn purple" id="btn-skip">跳过</button>
+        <button class="btn ghost" id="btn-quit">结束</button>
+      </div>
+    </section>
+    <!-- 设置页 -->
+    <section id="screen-settings" class="stage card" hidden>
+      <h2 style="text-align:center">设置</h2>
+      <div class="tabs" id="set-tabs">
+        <button class="tab on" data-tab="display">显示</button>
+        <button class="tab" data-tab="lang">语言</button>
+        <button class="tab" data-tab="suggest">给DQ提建议</button>
+      </div>
+      <!-- 显示 -->
+      <div class="set-block" id="tab-display">
+        <div class="set-title">系统显示</div>
+        <p class="set-desc">选择界面主题，选择会自动保存</p>
+        <div class="opt-list" id="theme-list">
+          <div class="opt-item" data-theme="light"><span class="n">浅色</span><span class="dsc">明亮柔和，白天使用</span></div>
+          <div class="opt-item" data-theme="dark"><span class="n">深色</span><span class="dsc">暗色护眼，夜间作画</span></div>
+        </div>
+        <div class="set-group">
+          <div class="set-group-t">桌宠 · 窗口置顶</div>
+          <div class="row" id="pet-top-row">
+            <button class="chip on" data-pet-top="1">开</button>
+            <button class="chip" data-pet-top="0">关</button>
+          </div>
+          <p class="set-desc" id="pet-top-note">开始计时速写时，桌宠窗口默认置顶显示</p>
+        </div>
+      </div>
+      <!-- 语言 -->
+      <div class="set-block" id="tab-lang" hidden>
+        <div class="set-title">界面语言</div>
+        <p class="set-desc">切换后界面文字与语音播报同步变化</p>
+        <div class="opt-list" id="lang-list">
+          <div class="opt-item" data-lang="zh"><span class="n">中文</span><span class="dsc">简体中文 · 打开就是它，界面与语音都中文</span></div>
+          <div class="opt-item" data-lang="en"><span class="n">English</span><span class="dsc">英文界面与语音 · 需要时手动切过来</span></div>
+        </div>
+      </div>
+      <!-- 给 DQ 提建议 -->
+      <div class="set-block" id="tab-suggest" hidden>
+        <div class="set-title">给 DQ 提建议</div>
+        <p class="set-qq">DQ QQ：3700810</p>
+        <p class="set-qq">DQ Email：3700810@qq.com</p>
+        <p class="set-qq">DQ小兔速写姬QQ群：1124504859</p>
+        <p class="set-desc">想加什么功能、哪里不好用，都可以写下来。写好后点「复制内容」，发给 DQ 的 QQ 或邮箱就行。最多 2000 字。</p>
+        <textarea id="suggest-text" maxlength="2000" placeholder="例如：希望增加「30 秒极限快写」模式……"></textarea>
+        <div class="suggest-bar">
+          <span id="suggest-count">0 / 2000</span>
+        </div>
+        <div class="suggest-actions">
+          <button class="btn ghost" id="btn-suggest-copy" style="margin-top:0">复制内容</button>
+          <button class="btn ghost" id="btn-suggest-clear" style="margin-top:0">清空</button>
+        </div>
+        <p class="suggest-status" id="suggest-status" hidden></p>
+      </div>
+      <button class="btn ghost" id="btn-settings-back">返回</button>
+    </section>
+    <!-- B站参考视频页 -->
+    <section id="screen-ref" class="stage" hidden>
+      <!-- 视频列表 -->
+      <div id="ref-list">
+        <div class="ref-head">
+          <h2>超速速涂系列 · 视频列表</h2>
+          <div>
+            <button class="chip" id="btn-shuffle-video">随机播放一期</button>
+            <a class="chip" href="https://space.bilibili.com/17702732/lists/6978956?type=season" target="_blank" rel="noopener" style="text-decoration:none">在B站看全部</a>
+          </div>
+        </div>
+        <div class="v-list" id="v-list"></div>
+      </div>
+      <!-- 播放器 -->
+      <div id="ref-player" hidden>
+        <div class="ref-frame">
+          <iframe id="bili-player"
+                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                  scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
+        </div>
+        <p class="ref-tip">
+          <button class="chip" id="btn-back-list">返回视频列表</button>
+          播放器内容来自 B 站，如加载失败——
+          <a href="https://space.bilibili.com/17702732/lists/6978956?type=season" target="_blank" rel="noopener">在B站打开「超速速涂系列」</a>
+        </p>
+      </div>
+      <button class="btn ghost" id="btn-ref-back">返回练习</button>
+    </section>
+    <!-- 结算页 -->
+    <section id="screen-summary" class="stage card" hidden>
+      <h2 style="text-align:center">本次练习完成</h2>
+      <div class="stat-grid">
+        <div><div class="num" id="sum-count">0</div><div class="lbl">完成张数</div></div>
+        <div><div class="num" id="sum-time">0</div><div class="lbl">专注秒数</div></div>
+        <div><div class="num" id="sum-streak">0</div><div class="lbl">连续天数</div></div>
+      </div>
+      <div class="star-panel" id="sum-star"></div>
+      <p class="sub" id="sum-cheer" style="margin:16px 0; text-align:center"></p>
+      <div class="share-box">
+        <div class="share-t">把成绩分享出去</div>
+        <div class="share-row">
+          <button class="mini-btn" id="btn-share-wx">微信</button>
+          <button class="mini-btn" id="btn-share-qq">QQ</button>
+          <button class="mini-btn" id="btn-share-x">X</button>
+          <button class="mini-btn" id="btn-share-copy">复制文案</button>
+        </div>
+        <p class="share-status" id="share-status"></p>
+      </div>
+      <button class="btn" id="btn-again">加油！我要再画一组！</button>
+      <button class="btn ghost" id="btn-back" style="margin-top:10px">返回</button>
+    </section>
+  </main>
+</div>
+<!-- 题库分类教程内容：管理员可直接编辑 assets/guides.js 替换文案、插图、GIF 演示 -->
+<script src="assets/guides.js"></script>
+<script>
+// ---------- 题库 ----------
+const TOPICS = {
+  line: { name: "动态线条", list: [
+    "一条C形线：从头部贯穿到脚底，画出身体的主弧",
+    "一条S形线：躯干扭转，上下半身反向发力",
+    "螺旋感线条：身体带旋转动势的连续长线",
+    "一笔不断：单笔捕捉奔跑姿态，中途不抬笔",
+    "重心垂线：站姿的长直线与地面交点",
+    "肩髋交叉线：肩线与髋线反向倾斜的动势",
+    "甩腕练习：手腕发力画出流畅长弧",
+    "重复描摹：同一条动态线连续画5遍求稳",
+    "短线爆发：用碎线表现瞬间发力感",
+    "线条节奏：起笔重、收笔轻的粗细变化"
+  ]},
+  csi: { name: "CSI线条", list: [
+    "C 型线：单向弯曲的弧线，一口气画满整页",
+    "S 型线：两头反向弯曲，感受方向的转折",
+    "I 型线：彻底的直线，起笔到收笔不抖不弯",
+    "CSI 串联：一条长线里完成 C→S→I 的过渡",
+    "C 型画背：用一条大C概括背部到臀部的大弧",
+    "S 型画脊柱：头到骨盆的反向双弧",
+    "I 型找重心：承重腿从头顶到脚跟一笔到底",
+    "CSI 抓动态：10秒一个姿势，只用三种线",
+    "线条弹性：起笔重、中段快、收笔轻，笔笔有节奏",
+    "30秒热身：C、S、I 各连画20条，中途不抬笔"
+  ]},
+  block: { name: "方块人", list: [
+    "胸腔方块+骨盆方块：正面站姿的体积朝向",
+    "方块扭转：胸腔朝左、骨盆朝右",
+    "方块前倾：跑步姿态的整体倾斜",
+    "方块后仰：伸展时胸廓打开",
+    "坐姿方块：压缩的胸腔与倾斜的骨盆",
+    "方块+圆柱四肢：搭出基本人形",
+    "俯视方块：能看到胸腔的顶面",
+    "仰视方块：能看到胸腔的底面",
+    "跳跃方块：整体倾斜与重心偏移",
+    "方块动态：肩线与髋线明显错开"
+  ]},
+  radish: { name: "萝卜人", list: [
+    "萝卜形躯干：上宽下窄的基本概括",
+    "倒萝卜：女性躯干的梨形轮廓",
+    "萝卜弯曲：弯腰时躯干的弧度",
+    "萝卜+四肢：火柴棍式手脚搭配",
+    "双萝卜叠加：胸腔与骨盆的层叠",
+    "萝卜扭转：侧身时的轮廓变化",
+    "萝卜压缩：坐姿下的挤压变形",
+    "萝卜拉伸：伸懒腰时的拉长感",
+    "萝卜倾斜：重心偏移的站姿",
+    "连续10个萝卜人：不同朝向快速写"
+  ]},
+  mass: { name: "体块人", list: [
+    "三大体块：头、胸腔、骨盆的体积关系",
+    "体块穿插：圆柱四肢插入方块躯干",
+    "体块挤压：腹部折叠时的挤压面",
+    "体块拉伸：侧腰伸展时的拉伸面",
+    "体块旋转：躯干整体朝向的旋转",
+    "体块透视：把胸腔当六面体来理解",
+    "动态体块：奔跑时三大块的错位",
+    "坐立体块：压缩后的体块堆叠",
+    "体块明暗：用简单明暗区分体积朝向",
+    "体块速写：30秒画出有体块感的人形"
+  ]},
+  circle: { name: "圈形训练", list: [
+    "连续画圆：手腕放松，一口气画100个圆",
+    "大小圆组合：头、肩、关节的圆形概括",
+    "椭圆透视：不同角度下的头颅椭圆",
+    "圆圈关节：肩、肘、腕的圆球连接",
+    "圆形胸腔：用球体理解胸腔体积",
+    "圆形骨盆：骨盆的碗形概括",
+    "圈形动态：用圆圈快速摆出人物动态",
+    "同心圆：头部旋转时的面部朝向变化",
+    "圈形人物：全身用圆形概括的完整人形",
+    "圆形+方形：圆润与硬朗形体的结合"
+  ]},
+  pose: { name: "动态姿势", list: [
+    "站姿：单脚重心，双手叉腰，回头看镜头",
+    "坐姿：抱膝坐在窗台，头微微倾斜",
+    "奔跑：大步向前，裙摆和头发向后飘",
+    "跳跃：双脚离地，双臂向上伸展",
+    "蹲姿：系鞋带的瞬间，背部有弧度",
+    "伸懒腰：双手举过头顶，身体拉伸",
+    "转身：回眸一笑，头发随动作甩动",
+    "走路：轻快步伐，一只手提书包",
+    "趴姿：趴在床上晃小腿，托腮",
+    "舞蹈感：单臂上扬，身体呈S曲线"
+  ]},
+  face: { name: "表情头像", list: [
+    "开心的笑：眼睛弯成月牙，露齿",
+    "害羞：脸红低头，眼神飘向侧面",
+    "生气：鼓腮帮，眉毛倒竖",
+    "惊讶：瞪大眼睛，嘴张成O形",
+    "自信微笑：单手叉腰，歪头",
+    "哭泣：眼泪在眼眶打转，嘴角下撇",
+    "困倦：半闭眼打哈欠",
+    "俏皮：吐舌头，单眼wink",
+    "忧郁：望向远方，眼神放空",
+    "坏笑：嘴角上扬，眼神带点狡黠"
+  ]},
+  hair: { name: "发型", list: [
+    "双马尾：高双马尾随风向右飘",
+    "长直发：及腰黑发，发梢微卷",
+    "短发bob头：齐刘海，发尾内扣",
+    "丸子头：松松的丸子，碎发垂落",
+    "麻花辫：单侧麻花辫搭在肩前",
+    "卷发：大波浪长发，画出发束层次",
+    "高马尾：运动感十足，发尾上扬",
+    "编发盘发：华丽感，画出编织结构",
+    "呆毛+翘发：睡醒乱发，方向感夸张",
+    "湿发：贴在脸颊和脖颈的发丝"
+  ]},
+  cloth: { name: "服装衣褶", list: [
+    "JK制服：百褶裙的褶皱规律",
+    "女仆装：荷叶边与围裙的层叠",
+    "运动服：宽松的卫衣袖子堆褶",
+    "和服：宽袖下垂的垂坠褶皱",
+    "洛丽塔裙：多层蓬蓬裙的体积感",
+    "衬衫：抬手时腋下的拉伸褶",
+    "披风：奔跑时向后飘动的大轮廓",
+    "毛衣：oversize 垂落感与袖口",
+    "旗袍：贴身剪裁与开衩动态",
+    "雨衣：硬挺材质的大块褶皱"
+  ]},
+  hand: { name: "手部特写", list: [
+    "比耶手势：V字，手指微弯",
+    "比心：拇指食指交叉",
+    "拿奶茶：握杯子的手指层次",
+    "指向镜头：透视缩短的手指",
+    "托腮：手指自然弯曲承重",
+    "比OK：圈形手指的结构",
+    "挥手：张开五指，掌心朝前",
+    "拿笔画画：握笔的精细动作",
+    "撩头发：手指穿过发丝",
+    "祈祷手势：双手合十微错开"
+  ]}
+};
+
+// ---------- 分类教程渲染（内容在 assets/guides.js，管理员可改） ----------
+const GUIDE_KEY = "sketchGuidesV1";   // 管理员在页面上编辑后的内容存这里
+const ADMIN_KEY = "sketchAdminV1";    // 管理员口令（改这里即改口令）
+const ADMIN_PWD = "dq2024";           // 默认口令：dq2024
+let adminMode = false;                // 是否已通过口令（记住在本机）
+let editingCat = null;                // 正在编辑的分类
+try { adminMode = localStorage.getItem(ADMIN_KEY) === "1"; } catch (e) {}
+
+function guideEdits() {
+  try { return JSON.parse(localStorage.getItem(GUIDE_KEY) || "{}"); } catch (e) { return {}; }
+}
+function saveGuideEdit(cat, data) {
+  const all = guideEdits();
+  if (data) all[cat] = data; else delete all[cat];
+  try {
+    localStorage.setItem(GUIDE_KEY, JSON.stringify(all));
+    return true;
+  } catch (e) {
+    alert("保存失败：内容太大，浏览器本地存储容量不足。\n建议演示图用外链 URL，或先导出备份后清理其它分类。");
+    return false;
+  }
+}
+// 默认内容（guides.js）与管理员修改合并
+function guideOf(cat) {
+  const base = (window.GUIDE_DATA || {})[cat];
+  if (!base) return null;
+  const ed = guideEdits()[cat];
+  return ed ? Object.assign({}, base, ed) : base;
+}
+function renderGuide() {
+  const box = $("guide-note"); if (!box) return;
+  const cat = S.cat;
+  if (!window.GUIDE_DATA) {                      // 教程文件没加载成功（极少见）
+    box.innerHTML = `<div class="csi-title">教程未加载</div>
+      <p class="csi-lead">没读到 assets/guides.js。请确认它和 index.html 在同一个文件夹里；若浏览器限制了本地文件读取，用一个本地服务器打开即可。</p>`;
+    return;
+  }
+  const t = guideOf(cat);
+  if (!t) { box.innerHTML = ""; return; }        // 「全部混合」等无教程
+  const ed = guideEdits()[cat];
+  const media = t.media || `<svg viewBox="0 0 240 178" role="img" aria-label="${t.name}图示">${t.fig || ""}</svg>`;
+  box.innerHTML = `
+    <div class="guide-head">
+      <div>
+        <div class="csi-title">${t.name} 训练</div>
+        <div class="csi-sub">${t.sub || ""}</div>
+      </div>
+      <div class="guide-admin">
+        ${adminMode ? `<button class="mini-btn" id="btn-guide-edit">编辑本页</button>
+          <button class="mini-btn" id="btn-guide-reset" title="恢复本页默认内容">恢复默认</button>
+          <button class="mini-btn ghost" id="btn-admin-logout">退出管理员</button>
+          ${ed ? `<span class="edited-tag">已自定义</span>` : ""}` : `<button class="mini-btn ghost" id="btn-admin-login">管理员</button>`}
+      </div>
+    </div>
+    <h3>为什么要练${t.name}？</h3>
+    <p class="csi-lead">${t.why || ""}</p>
+    <div class="csi-sec"><h3>${t.name}的作用</h3>
+      <ul>${(t.roles || []).map(r => `<li>${r}</li>`).join("")}</ul></div>
+    <div class="csi-sec"><h3>训练方法</h3>
+      <ul>${(t.hows || []).map(r => `<li>${r}</li>`).join("")}</ul></div>
+    <div class="csi-sec"><h3>${t.figTitle || "图示 / 演示"}</h3>
+      <div class="guide-media">${media}</div></div>
+    ${t.url ? `<div class="csi-sec">
+      <a class="ref-link" href="${t.url}" target="_blank" rel="noopener" title="在新窗口打开">${t.linkText || "参考链接"}</a>
+    </div>` : ""}
+    <p class="csi-tip">小提示：选「全部混合」时也会抽到「${t.name}」的题目</p>`;
+  if (adminMode) {
+    const be = $("btn-guide-edit"); if (be) be.addEventListener("click", () => openEditor(cat));
+    const br = $("btn-guide-reset"); if (br) br.addEventListener("click", () => {
+      if (confirm(`确定把「${t.name}」恢复成默认内容吗？`)) { saveGuideEdit(cat, null); renderGuide(); }
+    });
+    const bo = $("btn-admin-logout"); if (bo) bo.addEventListener("click", () => {
+      adminMode = false;
+      try { localStorage.removeItem(ADMIN_KEY); } catch (e) {}
+      renderGuide();
+    });
+  } else {
+    const bl = $("btn-admin-login"); if (bl) bl.addEventListener("click", adminLogin);
+  }
+}
+function adminLogin() {
+  const p = prompt("请输入管理员口令：");
+  if (p === null) return;
+  if (p === ADMIN_PWD) {
+    adminMode = true;
+    try { localStorage.setItem(ADMIN_KEY, "1"); } catch (e) {}
+    renderGuide();
+  } else {
+    alert("口令不对哦~");
+  }
+}
+// ---------- 管理员编辑面板 ----------
+function openEditor(cat) {
+  editingCat = cat;
+  const t = guideOf(cat); if (!t) return;
+  $("guide-note").innerHTML = `
+    <div class="guide-head">
+      <div><div class="csi-title">编辑：${t.name} 训练</div>
+        <div class="csi-sub">改完点「保存」，立即生效并存在本机浏览器</div></div>
+      <div class="guide-admin">
+        <button class="mini-btn ok" id="btn-ed-save">保存</button>
+        <button class="mini-btn" id="btn-ed-cancel">取消</button>
+        <button class="mini-btn ghost" id="btn-ed-export">导出备份</button>
+      </div>
+    </div>
+    <div class="ed-row"><label>标题名（分类名）</label><input id="ed-name" value="${t.name}"></div>
+    <div class="ed-row"><label>一句话定义</label><input id="ed-sub" value="${(t.sub || "").replace(/"/g, "&quot;")}"></div>
+    <div class="ed-row"><label>为什么要练（正文）</label><textarea id="ed-why">${t.why || ""}</textarea></div>
+    <div class="ed-row"><label>作用（一行一条）</label><textarea id="ed-roles">${(t.roles || []).join("\n")}</textarea></div>
+    <div class="ed-row"><label>训练方法（一行一条）</label><textarea id="ed-hows">${(t.hows || []).join("\n")}</textarea></div>
+    <div class="ed-row"><label>图示 / 演示标题</label><input id="ed-figtitle" value="${t.figTitle || "图示 / 演示"}"></div>
+    <div class="ed-row"><label>演示区内容（支持 HTML：SVG、&lt;img&gt; 图片 / GIF 动图）</label>
+      <textarea id="ed-media" class="tall">${(t.media || (t.fig ? `<svg viewBox="0 0 240 178" role="img">${t.fig}</svg>` : "")).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</textarea></div>
+    <div class="ed-row"><label>插入图片 / GIF</label>
+      <div class="ed-inline">
+        <input id="ed-imgurl" placeholder="粘贴图片或 GIF 的网址（推荐，省空间）">
+        <button class="mini-btn" id="btn-ed-addurl">插入</button>
+        <span class="ed-or">或</span>
+        <input type="file" id="ed-file" accept="image/*">
+        <span class="ed-hint">本地上传会内嵌进浏览器存储，建议单张小于 800KB</span>
+      </div>
+      <div id="ed-preview" class="ed-preview"></div>
+    </div>
+    <div class="ed-row"><label>参考链接</label><input id="ed-url" value="${t.url || ""}"></div>
+    <div class="ed-row"><label>链接文字</label><input id="ed-linktext" value="${t.linkText || ""}"></div>
+    <div class="ed-row"><label>导入备份</label>
+      <div class="ed-inline"><input type="file" id="ed-import" accept=".json"><span class="ed-hint">导入之前导出的 JSON 备份</span></div>
+    </div>`;
+  $("btn-ed-save").addEventListener("click", saveEditor);
+  $("btn-ed-cancel").addEventListener("click", () => renderGuide());
+  $("btn-ed-export").addEventListener("click", exportGuides);
+  $("btn-ed-addurl").addEventListener("click", () => {
+    const u = $("ed-imgurl").value.trim();
+    if (!u) return;
+    appendMedia(`<img src="${u}" alt="演示图">`);
+    $("ed-imgurl").value = "";
+  });
+  $("ed-file").addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      if (r.result.length > 1200000 && !confirm("这张图较大（约 " + Math.round(r.result.length / 1024 / 1024 * 10) / 10 + "MB），存进浏览器可能失败，继续吗？")) return;
+      appendMedia(`<img src="${r.result}" alt="演示图">`);
+      $("ed-preview").innerHTML = `<img src="${r.result}" alt="预览">`;
+    };
+    r.readAsDataURL(f);
+  });
+  $("ed-import").addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const obj = JSON.parse(r.result);
+        localStorage.setItem(GUIDE_KEY, JSON.stringify(obj.guides || obj));
+        alert("导入成功！");
+        renderGuide();
+      } catch (err) { alert("文件格式不对，导入失败"); }
+    };
+    r.readAsText(f);
+  });
+}
+function appendMedia(html) {
+  const ta = $("ed-media");
+  ta.value = (ta.value.trim() ? ta.value.trim() + "\n" : "") + html;
+}
+function saveEditor() {
+  const cat = editingCat;
+  const data = {
+    name: $("ed-name").value.trim() || guideOf(cat).name,
+    sub: $("ed-sub").value.trim(),
+    why: $("ed-why").value.trim(),
+    roles: $("ed-roles").value.split("\n").map(s => s.trim()).filter(Boolean),
+    hows: $("ed-hows").value.split("\n").map(s => s.trim()).filter(Boolean),
+    figTitle: $("ed-figtitle").value.trim(),
+    media: $("ed-media").value.trim(),
+    url: $("ed-url").value.trim(),
+    linkText: $("ed-linktext").value.trim()
+  };
+  if (saveGuideEdit(cat, data)) { renderGuide(); }
+}
+function exportGuides() {
+  const blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), guides: guideEdits() }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "guides-backup.json";
+  a.click();
+}
+
+// ---------- 状态 ----------
+const S = {
+  dur: 60, count: 10, mode: "image", cat: "all", timing: "down",
+  queue: [], idx: 0, phase: "draw", remaining: 0,
+  totalPhase: 0, paused: false, endAt: 0, timer: null,
+  phaseStart: 0, goalHit: false,
+  liveSec: 0, lastTickAt: 0,   // 当前这张已画秒数（还没写进打卡记录的部分，用于实时判断 1 小时目标）
+  doneCount: 0, focusSec: 0, images: [], readyToken: 0,
+  imgStore: { image: [] }                  // 上传的参考图（只有参考图模式一个模式了）
+};
+const $ = id => document.getElementById(id);
+const CIRC = 722.6;
+// ---------- 设置交互 ----------
+// dataKey = 按钮上的 data-* 属性名；isNum = 是否转成数字
+function bindChips(rowId, key, dataKey, isNum) {
+  $(rowId).addEventListener("click", e => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    $(rowId).querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+    b.classList.add("on");
+    const v = b.dataset[dataKey];
+    S[key] = isNum ? +v : v;
+    if (isNum && !(S[key] > 0)) S[key] = key === "dur" ? 60 : 10; // 兜底，避免取到非法值
+  });
+}
+bindChips("dur-row", "dur", "dur", true);
+// 选中预设时长时，收起自定义面板
+$("dur-row").addEventListener("click", () => {
+  $("dur-custom").hidden = true;
+  $("dur-note").hidden = true;
+  $("btn-custom-dur").textContent = "自定义";
+});
+// 自定义时长
+$("btn-custom-dur").addEventListener("click", () => {
+  $("dur-custom").hidden = !$("dur-custom").hidden;
+});
+$("btn-dur-apply").addEventListener("click", () => {
+  const n = Math.max(1, Math.min(120, +$("dur-input").value || 1));
+  const unit = +$("dur-unit").value;
+  S.dur = Math.max(1, n * unit);
+  $("dur-row").querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  const label = unit === 60 ? `${n} 分钟` : `${n} 秒`;
+  $("dur-note").hidden = false;
+  $("dur-note").textContent = customDurText(label, S.dur);
+  $("btn-custom-dur").textContent = `自定义 · ${label}`;
+});
+bindChips("cnt-row", "count", "cnt", true);
+// 计时方式：倒计时（默认）/ 正向计时 / 不计时
+bindChips("timing-row", "timing", "timing", false);
+const TIMING_NOTE = {
+  down: "倒计时：到点自动切换，最后 10 秒冲刺提示",
+  up: "正向计时：显示已过时间，到达目标轻提示，手动点「下一张」切换",
+  none: "不计时：自由练习，无时钟，画完点「下一张」即可"
+};
+$("timing-row").addEventListener("click", () => {
+  $("timing-note").textContent = TIMING_NOTE[S.timing] || "";
+});
+// 自定义张数（与单张时长结构一致）
+$("cnt-row").addEventListener("click", () => {
+  $("cnt-custom").hidden = true;
+  $("cnt-note").hidden = true;
+  $("btn-custom-cnt").textContent = "自定义";
+});
+$("btn-custom-cnt").addEventListener("click", () => {
+  $("cnt-custom").hidden = !$("cnt-custom").hidden;
+});
+$("btn-cnt-apply").addEventListener("click", () => {
+  const n = Math.max(1, Math.min(200, +$("cnt-input").value || 1));
+  S.count = n;
+  $("cnt-row").querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  $("cnt-note").hidden = false;
+  $("cnt-note").textContent = customCntText(n);
+  $("btn-custom-cnt").textContent = `自定义 · ${n} 张`;
+});
+// ⚠️ 两张卡片（练习设置 / 上传本地参考图）都**固定展开**：不能折叠、没有箭头、也没有选中高亮。
+// CSS 里 .mode-body 直接 display:block，所以这里既没有展开状态、也没有点标题折叠的动作（2026-09-29 定）。
+let refIdx = 0; // 当前在右侧画布预览的参考图序号
+const MAX_REFS = 9;   // 参考图上限：下面 3×3 缩略图正好排满，多了会挤成一团
+const refIdxMem = { image: 0 };              // 记住上次预览到哪张
+function setMode(m) {
+  if (S.mode !== m) {
+    const oldKey = refKey();
+    if (oldKey) refIdxMem[oldKey] = refIdx;
+    S.mode = m;
+    refIdx = refKey() ? (refIdxMem[m] || 0) : 0;
+    syncImages();
+    renderThumbs();
+  }
+  if (m === "image" && S.images.length) showRefThumb(refIdx);
+}
+// ---------- 参考图库 ----------
+// 只有「上传本地参考图」这一个模式了，图就存在这一份里。
+function refKey() { return S.mode === "image" ? "image" : null; }
+// 把当前模式的图同步进 S.images（切模式 / 增删图之后都要跑一次）
+function syncImages() {
+  const k = refKey();
+  S.images = k ? (S.imgStore[k] || []).slice() : [];
+  if (refIdx > S.images.length - 1) refIdx = S.images.length - 1;
+  if (refIdx < 0) refIdx = 0;
+}
+// 右侧画布的主视觉：showRef=true 只显示参考图（小兔形象让位），false 恢复小兔
+// 无论哪种，下面的文案块（.welcome：标题 + 说明 + 开始练习按钮）都保留
+function setWelcomeHero(showRef) {
+  $("welcome-img").hidden = !showRef;
+  ["hime-img", "hime-name"].forEach(c => {
+    const el = document.querySelector("#screen-welcome ." + c);
+    if (el) el.hidden = !!showRef;
+  });
+}
+// 参考图来源：文件选择 / 拖入 / Ctrl+V 粘贴，统一走 addImageSources
+function renderThumbs() {
+  setDynText($("upload-info"), uploadInfoText(S.images.length));
+  $("thumb-grid").innerHTML = S.images.map((src, i) =>
+    `<span class="thumb-cell">` +
+    `<img src="${src}" data-i="${i}" alt="参考图${i + 1}" title="点击查看大图" decoding="async">` +
+    `<button type="button" class="thumb-del" data-del="${i}" title="删除这张参考图" ` +
+    `aria-label="删除参考图${i + 1}">✕</button></span>`).join("");
+  updateUploadPreview();
+  petPurePreload(currentRefSrc());   // 上传完就先把图送到桌宠缓存，点开始时大图立刻出来
+}
+// 大方框内直接显示当前这张参考图：选完立刻看得见，不用等下面的缩略图
+function updateUploadPreview() {
+  const img = $("up-preview"), hint = $("up-hint"), empty = $("up-empty"), zone = $("upload-zone");
+  const del = $("up-del");
+  if (!img) return;
+  const src = S.images[refIdx];
+  if (src) {
+    img.src = src; img.alt = `参考图预览 ${refIdx + 1}`; img.hidden = false;
+    if (empty) empty.hidden = true;
+    if (del) del.hidden = false;
+    if (hint) { hint.hidden = false; setDynText(hint, refHintText(refIdx + 1, S.images.length)); }
+    if (zone) zone.classList.add("has-img");
+  } else {
+    img.hidden = true; img.removeAttribute("src");
+    if (empty) empty.hidden = false;
+    if (del) del.hidden = true;
+    if (hint) hint.hidden = true;
+    if (zone) zone.classList.remove("has-img");
+  }
+}
+// 删掉当前模式的第 i 张（blob: 本地图会顺手释放内存），删完自动预览相邻的一张
+function delRefThumb(i) {
+  const k = refKey(); if (!k) return false;
+  const list = S.imgStore[k] || [];
+  if (!(i >= 0 && i < list.length)) return false;
+  const gone = list.splice(i, 1)[0];
+  if (typeof gone === "string" && gone.indexOf("blob:") === 0) {
+    try { URL.revokeObjectURL(gone); } catch (e) {}
+  }
+  S.imgStore[k] = list;
+  syncImages();
+  renderThumbs();
+  if (!S.images.length) { refIdx = 0; setWelcomeHero(false); }
+  else showRefThumb(Math.min(i, S.images.length - 1));
+  return true;
+}
+// replace=true 覆盖（文件选择），false 追加（拖入 / 粘贴）
+// ⚠️ 一次最多 MAX_REFS 张：超出的直接不收，本地 blob 地址要释放，不然白占内存
+function addImageSources(srcs, replace) {
+  if (!srcs || !srcs.length) return 0;
+  const k = refKey() || "image";            // 不在参考图模式时，默认归到「上传本地参考图」
+  const base = replace ? [] : (S.imgStore[k] || []).slice();
+  const room = Math.max(0, MAX_REFS - base.length);
+  const ok = srcs.slice(0, room), over = srcs.slice(room);
+  over.forEach(s => {
+    if (typeof s === "string" && s.indexOf("blob:") === 0) { try { URL.revokeObjectURL(s); } catch (e) {} }
+  });
+  S.imgStore[k] = base.concat(ok);
+  syncImages();
+  renderThumbs();
+  if (ok.length) showRefThumb(S.images.length - ok.length);   // 预览新加入的第一张
+  if (over.length) petSay(refOverText(MAX_REFS), 6);
+  return ok.length;
+}
+// 从 DataTransfer / clipboardData 取图片：优先真实图片文件，其次图片网址
+function imageSourcesFromData(dt) {
+  const out = [];
+  if (!dt) return out;
+  try {
+    if (dt.files && dt.files.length)
+      [...dt.files].forEach(f => { if (/^image\//.test(f.type)) out.push(URL.createObjectURL(f)); });
+    if (!out.length && dt.items)
+      [...dt.items].forEach(it => {
+        if (it.kind === "file" && /^image\//.test(it.type)) {
+          const f = it.getAsFile(); if (f) out.push(URL.createObjectURL(f));
+        }
+      });
+    if (!out.length) {
+      const url = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").trim().split("\n")[0];
+      if (/^https?:\/\/.+\.(png|jpe?g|gif|webp|bmp|avif)(\?.*)?$/i.test(url)) out.push(url);
+    }
+  } catch (e) {}
+  return out;
+}
+$("file-input").addEventListener("change", e => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  e.target.value = "";                      // 清掉，方便再次选同一个文件
+  setMode("image");
+  addImageSources(files.map(f => URL.createObjectURL(f)), true);
+});
+// 把图片直接拖进「上传你的参考图」区域即可添加
+const uploadWrap = $("upload-wrap");
+const uploadZone = uploadWrap.querySelector(".upload-zone");
+["dragenter", "dragover"].forEach(ev => uploadWrap.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation();
+  if (uploadZone) uploadZone.classList.add("drag");
+}));
+["dragleave", "dragend"].forEach(ev => uploadWrap.addEventListener(ev, e => {
+  if (uploadZone && (e.type === "dragend" || !uploadWrap.contains(e.relatedTarget)))
+    uploadZone.classList.remove("drag");
+}));
+uploadWrap.addEventListener("drop", e => {
+  e.preventDefault(); e.stopPropagation();
+  if (uploadZone) uploadZone.classList.remove("drag");
+  const srcs = imageSourcesFromData(e.dataTransfer);
+  if (!srcs.length) return;
+  setMode("image");
+  addImageSources(srcs, false);
+  petSay("看看这个！");
+});
+// 阻止把文件拖到页面其它地方时浏览器直接打开它
+["dragover", "drop"].forEach(ev => document.addEventListener(ev, e => {
+  if (!e.target || !e.target.closest || !e.target.closest("#upload-wrap")) e.preventDefault();
+}));
+// 在页面 Ctrl+V：剪贴板里有图（本地复制 / 网页复制的图）就加入参考图
+document.addEventListener("paste", e => {
+  const dt = e.clipboardData; if (!dt) return;
+  const typing = e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName);
+  const hasImgFile = [...(dt.items || [])].some(it => it.kind === "file" && /^image\//.test(it.type));
+  if (!hasImgFile && typing) return;          // 输入框里粘文字，不拦截
+  const srcs = imageSourcesFromData(dt);
+  if (!srcs.length) return;
+  e.preventDefault();
+  setMode("image");
+  addImageSources(srcs, false);
+  petSay("看看这个！");
+});
+// 点击缩略图：在右侧画布显示该图（小兔形象让位，下面的文字块保留）
+function showRefThumb(i) {
+  const src = S.images[i]; if (!src) return;
+  refIdx = i;
+  petPurePreload(src);          // 换预览也顺手预推，点开始时这张图已经在桌宠那边了
+  $("welcome-img-el").src = src;
+  setWelcomeHero(true);
+  updateUploadPreview();                    // 大方框里的预览跟着换
+  $("thumb-grid").querySelectorAll("img").forEach(el => el.classList.remove("on"));
+  const el = $("thumb-grid").querySelector(`img[data-i="${i}"]`);
+  if (el) el.classList.add("on");
+  if ($("screen-practice").hidden === false || $("screen-summary").hidden === false ||
+      $("screen-ref").hidden === false || $("screen-guide").hidden === false) {
+    showScreen("welcome");
+  }
+}
+$("thumb-grid").addEventListener("click", e => {
+  const d = e.target.closest(".thumb-del");
+  if (d) { delRefThumb(+d.dataset.del); return; }   // 点「✕」删掉这一张
+  const t = e.target.closest("img"); if (!t) return;
+  showRefThumb(+t.dataset.i);
+});
+// 方框里那张预览图的 ✕：删掉当前这张，删完自动预览相邻的一张
+// ⚠️ ✕ 紧贴方框右上角，但必须在 <label> 外面，否则会把「点方框」的点击目标抢走；
+// 这里再挡一次冒泡/默认行为，避免任何情况下误触发文件选择框
+$("up-del").addEventListener("click", e => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (S.images.length) delRefThumb(refIdx);
+});
+// ---------- 音效 ----------
+let AC;
+function beep(freq, ms, delay = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === "suspended") { try { AC.resume(); } catch (e) {} }  // 页面在后台待久了会挂起
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.connect(g); g.connect(AC.destination);
+    o.frequency.value = freq; o.type = "sine";
+    const t = AC.currentTime + delay;
+    g.gain.setValueAtTime(0.36, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + ms / 1000);
+    o.start(t); o.stop(t + ms / 1000);
+  } catch (e) {}
+}
+// 时钟走针声：短促的"咔哒"声
+function tickTock(high) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.connect(g); g.connect(AC.destination);
+    o.type = "square";
+    o.frequency.value = high ? 2400 : 1800;
+    const t = AC.currentTime;
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    o.start(t); o.stop(t + 0.05);
+  } catch (e) {}
+}
+// 场景音效：跳过（下滑双音）、暂停（低落音）、继续（上扬双音）
+function skipSound()  { beep(750, 90); beep(500, 140, 0.1); }
+function pauseSound() { beep(320, 260); }
+function resumeSound(){ beep(500, 90); beep(750, 140, 0.1); }
+// ---------- 界面字体 ----------
+// 全项目只有一款字体：本地内置 MiSans Regular（小米免费商用），由 <head> 里的
+// assets/fonts/misans.css 内嵌引入，字体栈写死在 :root 的 --font-r / --font-b，
+// 界面不再提供字体切换（设置里已移除该功能）。
+// ---------- 主题与语言 ----------
+const THEME_KEY = "sketchThemeV1", LANG_KEY = "sketchLangV1";
+const LANG_TTS = { zh: "zh-CN", en: "en-US" };
+const DICT = {
+  en: {
+    "DQ小兔速写计时姬": "DQ Xiaotu Sketch Timer",
+    "二次元美少女专项 · 每天坚持速写 1~2 小时即可": "Anime girl sketch · Keep sketching 1~2 hours a day",
+    "单张时长": "Time each", "自定义": "Custom", "练习张数": "Pieces",
+    "打开本地参考图": "Reference",
+    "全部混合": "All", "动态线条": "Lines", "CSI线条": "CSI lines", "方块人": "Blocks", "萝卜人": "Radish",
+    "体块人": "Mass", "圈形训练": "Circles", "动态姿势": "Poses", "表情头像": "Faces",
+    "发型": "Hair", "服装衣褶": "Folds", "手部特写": "Hands",
+    "开始练习": "Start", "DQ速写参考": "DQ videos", "设置": "Settings",
+    "我的打卡": "My streak", "今日张数": "Today", "连续天数": "Streak", "累计张数": "Total",
+    "音色": "Voice", "字体": "Font", "显示": "Display", "语言": "Language",
+    "小兔音色": "Xiaotu voice", "界面字体": "Font", "系统显示": "Appearance", "界面语言": "Language",
+    "返回": "Back", "返回练习": "Back", "返回视频列表": "Back to list",
+    "小兔陪你练速写啦~": "Let's sketch with Xiaotu!",
+    "暂停": "Pause", "跳过": "Skip", "结束": "End", "继续": "Resume",
+    "绘制中": "Drawing", "休息一下": "Rest", "预备": "Ready",
+    "本次练习完成": "Session complete", "完成张数": "Done", "专注秒数": "Seconds",
+    "准备开始": "Ready", "开画！": "Start!", "倒计时": "Countdown",
+    "休息一下，先看看下一题": "Rest, preview the next one",
+    "收起": "Hide", "展开设置": "Settings",
+    "超速速涂系列 · 视频列表": "Speed sketch series",
+    "随机播放一期": "Random", "在B站看全部": "All on Bilibili",
+    "太棒了，整组完成！手感就是这样练出来的": "All done! That's how you build feel",
+    "完成一部分也是进步，明天继续加油": "Progress is progress, keep going",
+    "没关系，准备好再开始一轮吧": "No worries, start when ready",
+    "点击上传你的参考图（可多选，练习时随机轮播）": "Click to upload references (multiple)",
+    "一次最多 9 张，练习时随机轮播": "Up to 9 images, shuffled while practicing",
+    "在左侧上传参考图，再选好时长和张数": "Upload references on the left, then pick time and count",
+    "点击「开始练习」，参考图会出现在这里": "Hit Start and the reference appears here",
+    "快写热身用 30 秒~1 分钟，深入刻画用 10 分钟以上": "Warm up 30s~1min, deep work 10min+",
+    "点任意音色试听，选中的会用在「准备开始」「开画！」「倒计时」等全部语音播报": "Click to preview; the chosen voice is used for all announcements",
+    "全项目唯一字体：本地内置 MiSans Regular（小米免费商用），无需联网、随项目分发": "Only font: built-in MiSans Regular, works offline",
+    "选择界面主题，选择会自动保存": "Pick a theme; your choice is saved",
+    "练习数据全部保存在本地浏览器": "All practice data stays on your device",
+    "张": "pcs", "分钟": "min", "秒": "sec",
+    "明亮柔和，白天使用": "Bright and soft, for daytime",
+    "暗色护眼，夜间作画": "Dark and easy on the eyes, for night",
+    "简体中文": "Simplified Chinese", "英文界面与语音": "English UI and voice",
+    "播放器内容来自 B 站，如加载失败——": "Player content from Bilibili, if it fails—",
+    "在B站打开「超速速涂系列」": "Open the series on Bilibili",
+    "还没有参考图，请先上传": "No reference yet, please upload one",
+    "请先上传至少一张参考图": "Please upload at least one reference image",
+    "小兔陪你画速写": "Sketch with Xiaotu",
+    "系统语音": "System voice", "试听": "Play",
+    "元气妹妹": "Bubbly girl", "开朗活泼，语速轻快": "Cheerful and brisk",
+    "软萌奶音": "Soft and cute", "软软糯糯，撒娇感": "Soft, cuddly and coy",
+    "甜妹": "Sweet girl", "甜美清亮，亲和力强": "Sweet, clear and friendly",
+    "傲娇小恶魔": "Tsundere imp", "语气上扬，带点小得意": "Upbeat tone, a bit smug",
+    "温柔姐姐": "Gentle sister", "柔和稳重，鼓励型": "Soft, calm and encouraging",
+    "高冷少女": "Cool girl", "清冷中性，冷静提示": "Cool and neutral, calm cues",
+    "小萝莉": "Little loli", "音调最高，幼感十足": "Highest pitch, childlike",
+    "俏皮机灵": "Mischievous", "古灵精怪，节奏跳跃": "Playful with bouncy rhythm",
+    "知性少女": "Intellectual", "清晰自然，讲解感": "Clear and natural, instructive",
+    "慵懒困困": "Sleepy", "慢悠悠，刚睡醒的调调": "Slow and drowsy",
+    "寒蝉圆黑体": "Chill Round Gothic", "思源黑体圆角化 · 最像粗圆": "Rounded Source Han · closest to FZ Chuyuan",
+    "本地内置 · 正文默认 · 无需联网": "Built-in · default body font · works offline",
+    "本地内置 · 标题粗体专用": "Built-in · for headings and bold text",
+    "寒蝉全圆体": "Chill Round Full", "圆润更彻底 · 柔和": "Fully rounded · soft",
+    "猫啃珠圆体": "Maoken Pearl Round", "可爱标题圆体 · 萌感强": "Cute display round · very moe",
+    "么么哒无锋体": "MDMD Blunt Round", "浑圆无折角 · 温润": "Fully round, no sharp corners",
+    "抖音美好体": "Douyin Sans", "粗壮有力 · 标题感强": "Thick and strong · display feel",
+    "975圆体 Bold": "975Maru Bold", "圆体加粗 · 厚重饱满": "Rounded bold · heavy",
+    "975圆体 Medium": "975Maru Medium", "圆体中粗 · 均衡": "Rounded medium · balanced",
+    "975圆体 Regular": "975Maru Regular", "圆体常规 · 清秀": "Rounded regular · clean",
+    "M PLUS Rounded 粗": "M PLUS Rounded Bold", "日系丸ゴシック加粗（部分汉字缺）": "JP maru gothic bold (some Hanzi missing)",
+    "M PLUS Rounded": "M PLUS Rounded", "日系丸ゴシック常规（部分汉字缺）": "JP maru gothic (some Hanzi missing)"
+  }
+};
+const origText = new WeakMap();
+function detectLang() {
+  // 项目只做中文显示：默认恒为简体中文，不再跟随系统语言自动切换成英文
+  // （设置页「语言」标签仍可手动切到中文/英文，只是不再自动变；日语 2026-09-29 已删）
+  return "zh";
+}
+// 语言只有「中文 / 英文」两种；以前存过 "ja"（日语已删）的老记录会自然回落到中文
+function currentLang() {
+  try { return localStorage.getItem(LANG_KEY) === "en" ? "en" : detectLang(); } catch (e) { return detectLang(); }
+}
+function tr(t) {
+  const l = currentLang();
+  return (l !== "zh" && DICT[l] && DICT[l][t]) ? DICT[l][t] : t;
+}
+function translateAll() {
+  // 遍历文本节点：既能处理含子元素的混合内容，也能在切回中文时完整还原
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  nodes.forEach(tn => {
+    const raw = tn.nodeValue;
+    if (!raw || !raw.trim()) return;
+    if (!origText.has(tn)) origText.set(tn, raw);
+    const base = origText.get(tn);
+    const src = base.trim();
+    const out = tr(src);
+    const target = (out === src) ? base : base.replace(src, out);
+    if (tn.nodeValue !== target) tn.nodeValue = target;
+  });
+}
+function markOpt(listId, attr, val) {
+  const box = $(listId); if (!box) return;
+  box.querySelectorAll(".opt-item").forEach(el => el.classList.toggle("on", el.getAttribute(attr) === val));
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+  markOpt("theme-list", "data-theme", t);
+}
+function applyLang(l) {
+  try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+  markOpt("lang-list", "data-lang", l);
+  try { renderVideoList(); } catch (e) {}
+  try { renderGuide(); } catch (e) {}
+  renderStats();
+  try { renderThumbs(); } catch (e) {}   // 上传区说明 / 方框预览小条也跟着换语言
+  translateAll();
+}
+function durLabel(s) {
+  const l = currentLang();
+  const isMin = s % 60 === 0 && s >= 60;
+  if (l === "en") return isMin ? `${s / 60} minute${s / 60 > 1 ? "s" : ""}` : `${s} second${s > 1 ? "s" : ""}`;
+  return isMin ? `${s / 60}分钟` : `${s}秒`;
+}
+function pickVoiceLang(prefer) {
+  let vs = [];
+  try { vs = speechSynthesis.getVoices() || []; } catch (e) {}
+  const l = currentLang();
+  if (l === "zh") {
+    const z = vs.filter(v => /zh|cmn|中文|Chinese/i.test(v.lang + v.name));
+    return z.find(v => prefer && prefer.test(v.name)) || z.find(v => /女|female/i.test(v.name)) || z[0] || null;
+  }
+  const f = vs.filter(v => (v.lang || "").toLowerCase().startsWith("en"));
+  return f.find(v => /female|女/i.test(v.name)) || f[0] || null;
+}
+function progLine() {
+  const l = currentLang();
+  if (l === "en") return `No. ${S.idx + 1} / ${S.queue.length}`;
+  return `第 ${S.idx + 1} / ${S.queue.length} 张`;
+}
+function uploadInfoText(n) {
+  const l = currentLang();
+  if (l === "en") return `Loaded ${n}/${MAX_REFS} images · click a thumb to preview`;
+  if (!n) return `还没有参考图 · 点上面上传 / 拖进来 / Ctrl+V 粘贴（最多 ${MAX_REFS} 张）`;
+  return `已加载 ${n} / ${MAX_REFS} 张参考图 · 点小图换预览，右上角 ✕ 删掉这张`;
+}
+// 大方框预览左下角的小条：第几张 / 一共几张
+function refHintText(i, n) {
+  const l = currentLang();
+  if (l === "en") return `No.${i} / ${n} · click the box to add more`;
+  return `第 ${i} / ${n} 张 · 点方框继续加图`;
+}
+// 一次加太多被截断时的提示
+function refOverText(n) {
+  const l = currentLang();
+  if (l === "en") return `Up to ${n} images, the rest were skipped`;
+  return `一次最多 ${n} 张哦，多出来的没加进来`;
+}
+// 动态写入文案：同步刷新 origText，切语言时才不会被翻回旧的那句
+function setDynText(el, txt) {
+  if (!el) return;
+  el.textContent = txt;
+  if (el.firstChild) origText.set(el.firstChild, txt);
+}
+function customDurText(label, sec) {
+  const l = currentLang();
+  if (l === "en") return `Custom: ${label} (${sec} sec)`;
+  return `自定义时长：${label}（${sec} 秒）`;
+}
+function customCntText(n) {
+  const l = currentLang();
+  if (l === "en") return `Custom count: ${n}`;
+  return `自定义张数：${n} 张`;
+}
+$("set-tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab"); if (!b) return;
+  $("set-tabs").querySelectorAll(".tab").forEach(t => t.classList.remove("on"));
+  b.classList.add("on");
+  ["display", "lang", "suggest"].forEach(k => { $("tab-" + k).hidden = k !== b.dataset.tab; });
+});
+
+// ---------- 管理员维护面板（题库 / 分类教程） ----------
+const TOPIC_KEY = "sketchTopicsV1";  // 管理员改过的题库 { 分类: [题目] }
+// ---------- 管理员维护面板 ----------
+function topicEdits() { try { return JSON.parse(localStorage.getItem(TOPIC_KEY) || "{}"); } catch (e) { return {}; } }
+function topicListOf(cat) {
+  const ed = topicEdits()[cat];
+  if (Array.isArray(ed) && ed.length) return ed;
+  return (TOPICS[cat] || {}).list || [];
+}
+function openAdminPanel() {
+  if (!adminMode) return;             // 账号功能已删，这里改用教程页那套管理员口令
+  const sel = $("ad-cat");
+  sel.innerHTML = Object.keys(TOPICS).map(c =>
+    `<option value="${c}" ${c === S.cat ? "selected" : ""}>${TOPICS[c].name}</option>`).join("");
+  loadAdminCat();
+  showScreen("admin");
+}
+function loadAdminCat() {
+  const c = $("ad-cat").value;
+  $("ad-topics").value = topicListOf(c).join("\n");
+  const ed = topicEdits()[c];
+  $("ad-note").textContent = ed ? "这个分类的题目已自定义（显示的是修改后内容）" : "当前是默认题目";
+}
+$("btn-admin-panel") && $("btn-admin-panel").addEventListener("click", openAdminPanel);
+$("ad-cat") && $("ad-cat").addEventListener("change", loadAdminCat);
+$("btn-ad-save") && $("btn-ad-save").addEventListener("click", () => {
+  const c = $("ad-cat").value;
+  const list = $("ad-topics").value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!list.length) { alert("至少要留一条题目"); return; }
+  const all = topicEdits(); all[c] = list;
+  try { localStorage.setItem(TOPIC_KEY, JSON.stringify(all)); } catch (e) { alert("保存失败：存储空间不足"); return; }
+  $("ad-note").textContent = `已保存 ${list.length} 条题目，下次练习生效`;
+});
+$("btn-ad-reset") && $("btn-ad-reset").addEventListener("click", () => {
+  const c = $("ad-cat").value;
+  const all = topicEdits(); delete all[c];
+  localStorage.setItem(TOPIC_KEY, JSON.stringify(all));
+  loadAdminCat();
+});
+$("btn-ad-guide") && $("btn-ad-guide").addEventListener("click", () => {
+  const c = $("ad-cat").value;
+  S.cat = c;
+  d_cat_chip(c);
+  adminMode = true; try { localStorage.setItem(ADMIN_KEY, "1"); } catch (e) {}
+  showScreen("guide"); renderGuide(); openEditor(c);
+});
+$("btn-admin-back") && $("btn-admin-back").addEventListener("click", () => showScreen("welcome"));
+function d_cat_chip(c) {
+  const b = document.querySelector(`#cat-row .chip[data-cat="${c}"]`);
+  if (b) {
+    document.querySelectorAll("#cat-row .chip").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+  }
+}
+
+// ---------- 给 DQ 提建议 ----------
+const SUGGEST_MAX = 2000;                // 字数上限
+// 联系 DQ 的方式直接写在界面上（QQ / 邮箱见「给 DQ 提建议」标题下那两行）。
+// 原来那两个发送按钮（发送到 DQ QQ / 发送到 DQ邮箱）连同它们的通道（tencent:// 唤起、
+// mailto 投递、断网待发队列、网络探测）已于 2026-09-29 按要求删除，只留「复制内容 / 清空」。
+function setStatus(msg, kind) {
+  const el = $("suggest-status"); if (!el) return;
+  el.hidden = false; el.className = "suggest-status " + (kind || ""); el.textContent = msg;
+}
+// 联系方式那三行只做展示、不给复制按钮（2026-09-29 按要求删掉）：
+// 浏览器直接打开页面（file://）时剪贴板接口不可用，点了只会弹「没能自动复制」，不如不要。
+$("suggest-text").addEventListener("input", () => {
+  const v = $("suggest-text").value || "";
+  $("suggest-count").textContent = `${v.length} / ${SUGGEST_MAX}`;
+});
+$("btn-suggest-clear").addEventListener("click", () => {
+  $("suggest-text").value = "";
+  $("suggest-count").textContent = `0 / ${SUGGEST_MAX}`;
+  setStatus("已清空输入框。", "wait");
+});
+$("btn-suggest-copy").addEventListener("click", async () => {
+  const v = $("suggest-text").value || "";
+  if (!v.trim()) { setStatus("还没有内容可以复制。", "err"); return; }
+  try {
+    await navigator.clipboard.writeText(v);
+    setStatus("已复制到剪贴板，粘贴到 QQ 或邮件里发给 DQ 就行。", "ok");
+  } catch (e) {
+    $("suggest-text").select();
+    setStatus("请按 Ctrl / Cmd + C 复制选中的内容。", "wait");
+  }
+});
+$("theme-list").addEventListener("click", e => {
+  const it = e.target.closest(".opt-item"); if (!it) return;
+  applyTheme(it.dataset.theme);
+});
+$("lang-list").addEventListener("click", e => {
+  const it = e.target.closest(".opt-item"); if (!it) return;
+  applyLang(it.dataset.lang);
+});
+// ---------- 小兔音色（播报引擎，界面已无选择入口） ----------
+// 10 种风格化少女音色（通过音调/语速塑造不同性格）
+// 10 款音色：ref = DQ 提供的参考音频（assets/voice/ 下内置 30 条，10 款 × 3 条）
+// 说明：合成语音是按参考音频的音色特征调校的（音高/语速/发音人），不是直接播放这些文件。
+// 设置里已移除音色面板，界面不再提供选择/试听，播报固定使用 DEFAULT_VOICE（甜妹）。
+const VOICE_PRESETS = [
+  { id: "p1", name: "元气妹妹", dsc: "开朗活泼，语速轻快", pitch: 2.0, rate: 1.15, prefer: /xiaoxiao|晓晓|xiaoyi|晓伊|女|female/i, refs: ["01_元气妹妹_01.mp3", "01_元气妹妹_02.mp3", "01_元气妹妹_03.mp3"] },
+  { id: "p2", name: "软萌奶音", dsc: "软软糯糯，撒娇感", pitch: 2.2, rate: 0.95, prefer: /xiaoxiao|晓晓|女|female/i, refs: ["02_软萌奶音_01.mp3", "02_软萌奶音_02.mp3", "02_软萌奶音_03.mp3"] },
+  { id: "p3", name: "甜妹", dsc: "甜美清亮，亲和力强（默认）", pitch: 1.95, rate: 1.02, prefer: /xiaoxiao|晓晓|xiaoyi|女|female/i, refs: ["03_甜妹_01.mp3", "03_甜妹_02.mp3", "03_甜妹_03.mp3"] },
+  { id: "p4", name: "傲娇小恶魔", dsc: "语气上扬，带点小得意", pitch: 1.7, rate: 1.22, prefer: /xiaoyi|晓伊|xiaoxiao|女|female/i, refs: ["04_傲娇小恶魔_01.mp3", "04_傲娇小恶魔_02.mp3", "04_傲娇小恶魔_03.mp3"] },
+  { id: "p5", name: "温柔姐姐", dsc: "柔和稳重，鼓励型", pitch: 1.25, rate: 0.95, prefer: /xiaoxiao|晓晓|yunxi|云希|女|female/i, refs: ["05_温柔姐姐_01.mp3", "05_温柔姐姐_02.mp3", "05_温柔姐姐_03.mp3"] },
+  { id: "p6", name: "高冷少女", dsc: "清冷中性，冷静提示", pitch: 1.05, rate: 1.0, prefer: /xiaoxiao|yunxi|晓晓|女|female/i, refs: ["06_高冷少女_01.mp3", "06_高冷少女_02.mp3", "06_高冷少女_03.mp3"] },
+  { id: "p7", name: "小萝莉", dsc: "音调最高，幼感十足", pitch: 2.4, rate: 1.1, prefer: /xiaoxiao|晓晓|女|female/i, refs: ["07_小萝莉_01.mp3", "07_小萝莉_02.mp3", "07_小萝莉_03.mp3"] },
+  { id: "p8", name: "俏皮机灵", dsc: "古灵精怪，节奏跳跃", pitch: 2.1, rate: 1.32, prefer: /xiaoyi|晓伊|xiaoxiao|女|female/i, refs: ["08_俏皮机灵_01.mp3", "08_俏皮机灵_02.mp3", "08_俏皮机灵_03.mp3"] },
+  { id: "p9", name: "知性少女", dsc: "清晰自然，讲解感", pitch: 1.45, rate: 1.0, prefer: /xiaoxiao|晓晓|yunxi|女|female/i, refs: ["09_知性少女_01.mp3", "09_知性少女_02.mp3", "09_知性少女_03.mp3"] },
+  { id: "p10", name: "慵懒困困", dsc: "慢悠悠，刚睡醒的调调", pitch: 1.15, rate: 0.82, prefer: /xiaoxiao|晓晓|女|female/i, refs: ["10_慵懒困困_01.mp3", "10_慵懒困困_02.mp3", "10_慵懒困困_03.mp3"] }
+];
+// 默认音色：甜妹（真实参考音频 03_甜妹_01.mp3）
+const DEFAULT_VOICE = "p3";
+function presetOf(id) { return VOICE_PRESETS.find(p => p.id === id) || null; }
+function defaultPreset() { return presetOf(DEFAULT_VOICE) || VOICE_PRESETS[0]; }
+const VOICE_KEY = "sketchVoiceV1";
+function zhVoices() {
+  try { return (speechSynthesis.getVoices() || []).filter(v => /zh|cmn|中文|Chinese/i.test(v.lang + v.name)); }
+  catch (e) { return []; }
+}
+function pickVoice(prefer) {
+  const vs = zhVoices();
+  if (!vs.length) return null;
+  return vs.find(v => prefer.test(v.name)) || vs.find(v => /女|female/i.test(v.name)) || vs[0];
+}
+function getVoiceChoice() {
+  try {
+    const c = JSON.parse(localStorage.getItem(VOICE_KEY));
+    if (c && (c.type === "sys" ? c.name : VOICE_PRESETS.some(p => p.id === c.id))) return c;
+  } catch (e) {}
+  return { type: "preset", id: DEFAULT_VOICE };
+}
+// 真实引导语音（DQ 录制，放在 assets/voice/guide/）：01-08 与上面 SPEAK_LINES 一一对应
+// 播放策略：有对应音频就播音频，缺失或播放失败自动回退到系统合成语音念 text
+const VOICE_CLIP_DIR = "assets/voice/guide/";
+const VOICE_CLIPS = {
+  sample: "速写引导_01_开场.mp3",        // 开场白 → 设置页试听
+  ready:  "速写引导_02_准备起笔.mp3",    // 点开始练习
+  start:  "速写引导_03_开画.mp3",        // 正式开画
+  go:     "速写引导_09_GOGOGO_元气版.mp3", // 开场哨声：开画之后先播 GOGOGO，再播倒计时，最后进度条开走
+  rest:   "速写引导_08_休息.mp3",        // 一张画完的休息提示
+  cd: {                                  // 倒计时节点：按剩余秒数取
+    180: "速写引导_04_倒计时3分钟.mp3",
+    60:  "速写引导_05_倒计时1分钟.mp3",
+    30:  "速写引导_06_倒计时30秒.mp3",
+    10:  "速写引导_07_倒计时10秒.mp3"
+  }
+};
+function clipForCountdown(sec) { return (VOICE_CLIPS.cd || {})[sec] || null; }
+
+// ---------- 倒计时滴答音 ----------
+// 计时音是默认就有的，没有开关：进度条开始转 → 滴答响起；归零 / 暂停 / 跳过 / 结束 → 立刻停。
+// 最后 10 秒不再用滴答，而是切回原来的「逐秒升调提示音」，收尾提示更明确。
+const TICK_DIR = "assets/voice/sfx/";
+const TICK_FILE = "时钟滴答_适中.mp3";
+const TICK_FROM = 10;                    // 进入最后 10 秒：停掉滴答，改用原来的逐秒提示音
+const TICK_VOL = .825;                   // 音量（原 .55，按 DQ 要求调大 50%）
+let tickAudio = null, tickFinal = false; // tickFinal：本段是否已进入最后 10 秒
+function newTickEl() {
+  const a = new Audio(TICK_DIR + encodeURIComponent(TICK_FILE));
+  a.loop = true; a.playbackRate = 1; a.volume = TICK_VOL;
+  return a;
+}
+// 用真实用户手势（点「开始练习」）先把音频元素「解锁」：静音播一瞬再暂停，
+// 这样几秒后正式开画时再 play 就不会被浏览器的自动播放策略拦掉。
+function primeTick() {
+  if (tickAudio) return;
+  try {
+    const a = newTickEl();
+    a.volume = 0;
+    const p = a.play();
+    if (p && p.then) p.then(() => {
+      try { a.pause(); a.currentTime = 0; a.volume = TICK_VOL; } catch (e) {}
+    }).catch(() => {});
+    tickAudio = a;
+    tickFinal = false;
+  } catch (e) {}
+}
+// 正式开始绘画（进度条开始转）就起声，一直到归零才停
+function startTick() {
+  try {
+    if (!tickAudio) tickAudio = newTickEl();
+    tickAudio.volume = TICK_VOL;
+    tickAudio.playbackRate = 1;
+    tickFinal = false;
+    try { tickAudio.currentTime = 0; } catch (e) {}
+    const p = tickAudio.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+}
+// 进入最后 10 秒：滴答让位给原来的逐秒升调提示音（只切一次）
+function tickFinalOn() {
+  if (tickFinal) return;
+  tickFinal = true;
+  stopTick();
+}
+function stopTick() {
+  try { if (tickAudio) { tickAudio.pause(); tickAudio.currentTime = 0; } } catch (e) {}
+  tickAudio = null;
+}
+let clipAudio = null, clipBusy = false;
+const clipQueue = [];
+function stopClips() {
+  try { if (clipAudio) { clipAudio.pause(); clipAudio.currentTime = 0; } } catch (e) {}
+}
+// 串行播放：每项 {file, text}，file 优先；{end:fn} 表示队列走完的回调
+function speakSeq(items, done) {
+  items.forEach(i => clipQueue.push(i));
+  if (done) clipQueue.push({ end: done });
+  runClipQueue();
+}
+function runClipQueue() {
+  if (clipBusy) return;
+  const item = clipQueue.shift();
+  if (!item) return;
+  if (item.end) { try { item.end(); } catch (e) {} runClipQueue(); return; }
+  clipBusy = true;
+  const next = () => { clipBusy = false; runClipQueue(); };
+  if (item.file) {
+    try {
+      stopClips();
+      clipAudio = new Audio(VOICE_CLIP_DIR + encodeURIComponent(item.file));
+      clipAudio.volume = 1;
+      let fin = false, timer = null;
+      const finish = cb => () => { if (fin) return; fin = true; if (timer) clearTimeout(timer); cb(); };
+      const giveUp = () => { if (item.text) speak(item.text, true); next(); };
+      timer = setTimeout(finish(next), 15000);   // 15 秒兜底，防音频异常时队列卡死
+      clipAudio.onended = finish(next);
+      clipAudio.onerror = finish(giveUp);
+      const p = clipAudio.play();
+      if (p && p.catch) p.catch(finish(giveUp));
+      return;
+    } catch (e) {}
+  }
+  if (item.text) speak(item.text, true);
+  setTimeout(next, Math.min(6000, (item.text || "").length * 260 + 700)); // TTS 时长估算
+}
+function speakWith(cfg, text) {
+  try {
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LANG_TTS[currentLang()];
+    u.volume = 1.0;
+    if (cfg.type === "sys") {
+      const v = zhVoices().find(v => v.name === cfg.name);
+      if (v) u.voice = v;
+      u.pitch = 1.6; u.rate = 1.05;
+    } else {
+      const p = presetOf(cfg.id) || defaultPreset();
+      u.pitch = p.pitch; u.rate = p.rate;
+      const v = pickVoiceLang(p.prefer); if (v) u.voice = v;
+    }
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+// 可爱女声语音提示（enqueue=true 时排队播放，不打断前一句）
+function speak(text, enqueue) {
+  try {
+    if (!window.speechSynthesis) return;
+    if (enqueue) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = LANG_TTS[currentLang()]; u.volume = 1.0;
+      const c = getVoiceChoice();
+      if (c.type === "sys") {
+        const v = zhVoices().find(v => v.name === c.name); if (v) u.voice = v;
+        u.pitch = 1.6; u.rate = 1.05;
+      } else {
+        const p = presetOf(c.id) || defaultPreset();
+        u.pitch = p.pitch; u.rate = p.rate;
+        const v = pickVoiceLang(p.prefer); if (v) u.voice = v;
+      }
+      speechSynthesis.speak(u);
+      return;
+    }
+    speakWith(getVoiceChoice(), text);
+  } catch (e) {}
+}
+// 真实参考音频播放（原声试听）
+// 说明：设置里已移除「音色」面板（界面不再提供音色选择/试听），
+// 播报引擎照旧工作：固定使用默认音色 甜妹（DEFAULT_VOICE，参考 03_甜妹_01.mp3）。
+if (window.speechSynthesis) {
+  speechSynthesis.getVoices();   // 预取系统语音列表，供播报时挑中文人声
+}
+// ---------- 桌宠陪画模式 ----------
+// 桌宠和用户一起进入专注：开始练习时通过桌面 exe 内置的本地代理（127.0.0.1:18765）
+// 让桌宠进入「陪画」相位（focus→tired→doze→done，桌宠头顶冒气泡、中途会累会打瞌睡）；
+// 网页轮询 /pet_state，相位进入 tired/doze 时用「慵懒困困」音色播一句陪画文案——
+// 该音色在这里成为真正的功能，而不是装饰。
+// 网页独立打开（没有 exe）时所有请求都会失败并被静默忽略，功能自动降级。
+const PET_BASE = "http://127.0.0.1:18765";
+const COMP_PHRASE = {
+  focus: ["陪你一起画~", "我们一起加油！", "专注中，笔尖动起来~", "今天也要进步一点点"],
+  tired: ["唔…有点累了", "手腕歇一下下", "画得手酸酸", "偷偷打了个哈欠"],
+  doze:  ["困了…zzz", "陪你画得想睡觉", "眼皮好重呀", "眯一会儿…"],
+  done:  ["画完啦，辛苦啦~"]
+};
+let compTimer = null, compLastPhase = "";
+function petFetch(path) {
+  try {
+    if (typeof fetch !== "function") return null;
+    return fetch(PET_BASE + path, { cache: "no-store" }).catch(() => null);
+  } catch (e) { return null; }
+}
+function compStart(sec) {
+  petFetch("/pet?cmd=companion_start&dur=" + Math.max(1, Math.round(sec || 0)));
+}
+function compStop() { petFetch("/pet?cmd=companion_stop"); }
+function compPollStop() { if (compTimer) { clearInterval(compTimer); compTimer = null; } }
+function compPoll() {
+  const p = petFetch("/pet_state");
+  if (!p) return;
+  p.then(r => (r && r.ok) ? r.json() : null).then(j => {
+    if (j && j.ok && j.companion && (j.phase === "tired" || j.phase === "doze")) {
+      if (j.phase !== compLastPhase) {
+        compLastPhase = j.phase;
+        const pool = COMP_PHRASE[j.phase] || ["陪你画得想睡觉"];
+        const txt = pool[Math.floor(Math.random() * pool.length)];
+        speakWith(presetOf("p10"), txt);   // 慵懒困困：陪画模式的功能点
+      }
+    } else {
+      compLastPhase = "";
+    }
+  }).catch(() => {});
+}
+// 开始一组练习：计时模式（倒计时/正向计时）才陪画；不计时没有明确总时长，不陪画
+function compSessionBegin() {
+  if (S.timing === "none") { compStop(); compPollStop(); return; }
+  compStart(S.dur * S.count);
+  if (!compTimer) compTimer = setInterval(compPoll, 3000);
+}
+function compSessionEnd() { compStop(); compPollStop(); compLastPhase = ""; }
+
+// ---- 桌宠快捷指令（置顶 / 参考图）----
+function petSay(text, secs) {
+  petFetch("/pet?cmd=say&secs=" + (secs || 6) + "&text=" + encodeURIComponent(text || ""));
+}
+function petExpr(kind) { petFetch("/pet?cmd=expr&kind=" + encodeURIComponent(kind || "happy")); }
+function petTopmost(on) { petFetch("/pet?cmd=topmost&on=" + (on ? "1" : "0")); }
+// 纯净参考图模式：只留一张置顶大图，主界面**一步隐藏**（不是最小化，没有缩小动画）；
+// 滚轮缩放 50%~200%（放大到最大也不出屏幕四边），右键「图片另存为…」，
+// 右键「显示主界面」/「移到下一个屏幕」，或双击大图唤回。
+// POST /pet_pure    在桌面端原子完成「换图 + 进入」，避免分两次请求的竞争。
+// POST /pet_preload 提前把图送过去解码缓存（不建窗、不改界面），
+//   这样点「开始练习」时桌面端不用再走「编码 → 传输 → 解码」，大图立刻弹出来。
+let _purePreSrc = "";                      // 已经预推给桌面端缓存好的那张图
+let _pureCurSrc = "";                      // 桌面端大图当前显示的那张
+let _preWant = "";                         // 最近一次「想预推」的那张
+let _preBusy = "";                         // 正在预推的那张（同一时刻只推一张）
+// 把重活推到「界面已经画出来之后」再做。
+// ⚠️ 选图时必须先让图立刻上屏，编码 / 传输这些放到空闲时，否则选完要愣一下才显示。
+function whenIdle(fn) {
+  if (window.requestIdleCallback) requestIdleCallback(fn, { timeout: 900 });
+  else setTimeout(fn, 120);
+}
+function pureToData(src) {                 // 本地图 → 缩放后的 data:uri（http 原样返回）
+  return new Promise(resolve => {
+    if (/^https?:\/\//i.test(src)) { resolve(src); return; }
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 1440;                  // 纯净模式要放得大，分辨率给足
+        const r = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.max(1, Math.round(img.width * r));
+        cv.height = Math.max(1, Math.round(img.height * r));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        // ⚠️ 这里**不能**用 toDataURL：PNG 编码是同步的，一张大图能把主线程卡住好几百毫秒，
+        //    表现就是「选完图要愣一下才显示」。toBlob 把编码丢给后台线程，界面不会顿。
+        if (cv.toBlob) {
+          cv.toBlob(b => {
+            if (!b) { resolve(null); return; }
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = () => resolve(null);
+            fr.readAsDataURL(b);
+          }, "image/png");
+        } else {
+          resolve(cv.toDataURL("image/png"));    // 兜底：不支持 toBlob 的老浏览器
+        }
+      } catch (e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+// 后台预推：只在桌宠（exe）在线时有用；网页单独打开时请求失败会被静默忽略。
+// 同一时刻只推一张，并且总是收敛到「最后选中的那张」，中途换图不会排队推一堆没用的。
+function petPurePreload(src) {
+  if (!src || typeof fetch !== "function" || src === _purePreSrc) return;
+  _preWant = src;
+  if (_preBusy) return;                    // 已经有一张在推：它结束后会自动接着推最新那张
+  whenIdle(runPreload);
+}
+function runPreload() {
+  const src = _preWant;
+  if (!src || src === _purePreSrc) { _preBusy = ""; return; }
+  _preBusy = src;
+  Promise.resolve(pureToData(src)).then(d => {
+    if (!d) return null;
+    return fetch(PET_BASE + "/pet_preload", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ d: d })
+    }).then(r => { if (r && r.ok) _purePreSrc = src; }).catch(() => {});
+  }).catch(() => {}).then(() => {
+    _preBusy = "";
+    if (_preWant && _preWant !== _purePreSrc) whenIdle(runPreload);   // 期间又换了图：接着推
+  });
+}
+function petPureStart(src, again) {
+  if (!src || typeof fetch !== "function") return;
+  _pureQuitDone = false;                 // 新的一组：复位「退出速写」信号
+  petClockStart();                       // 小兔旁边立刻开始显示倒计时
+  const post = d => fetch(PET_BASE + "/pet_pure", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ d: d, on: true })
+  }).then(() => true).catch(() => false);
+  const failed = () => {
+    if (!again) { setTimeout(() => petPureStart(src, true), 700); return; }  // 失败重试一次
+    petFetch("/pet?cmd=pure_end");   // 两次都没进去：把主界面还给人家，别把人晾在空白桌面
+  };
+  // 这张图已经预推过：只发「进入」不带图，桌面端用缓存的图直接弹出来
+  if (src === _purePreSrc) { post("").then(ok => { if (ok) _pureCurSrc = src; else failed(); }); return; }
+  pureToData(src).then(d => {
+    if (!d) { failed(); return; }
+    post(d).then(ok => { if (ok) { _purePreSrc = src; _pureCurSrc = src; } else failed(); });
+  }).catch(() => failed());
+}
+// 让桌面端大图跟上「当前要画的那张」；休息时顺手把下一张先预推过去
+function pureSyncImage() {
+  if (S.phase === "idle") return;
+  const it = S.queue[S.idx];
+  const src = (it && it.img) || null;
+  if (S.phase === "draw") {
+    if (src && src !== _pureCurSrc) petPureStart(src);
+    return;
+  }
+  const nx = S.queue[S.idx + 1];         // 休息中：先准备好下一张，切过去才不等
+  if (nx && nx.img) petPurePreload(nx.img);
+}
+function petPureEnd() { petClockStop(); petFetch("/pet?cmd=pure_end"); _pureCurSrc = ""; }
+// 纯净模式里小兔旁边的倒计时：每秒把当前秒数 + 状态推给桌面端（left=-1 表示不显示）
+// 同时这条心跳也用来接桌面端的「退出速写」信号（响应里带 quit:true → 结束这一组回到主界面）
+let _pureClockId = 0, _pureQuitDone = false;
+function petTimerPush() {
+  if (typeof fetch !== "function") return;
+  const secs = Math.max(0, (S.endAt - Date.now()) / 1000);
+  let left = -1, label = "";
+  if (S.phase === "ready") { left = Math.ceil(secs); label = "准备起笔"; }
+  else if (S.phase === "draw") {
+    if (S.timing === "none") { left = -1; }                       // 不计时：自由练习，不显示数字
+    else if (S.timing === "up") { left = Math.floor((Date.now() - S.phaseStart) / 1000); label = "已画"; }
+    else { left = Math.ceil(secs); label = left <= 10 ? "最后冲刺" : "绘制中"; }
+  } else if (S.phase === "rest") { left = Math.ceil(secs); label = "休息一下"; }
+  const url = PET_BASE + "/pet?cmd=timer&left=" + left + "&label=" + encodeURIComponent(label);
+  fetch(url, { cache: "no-store" }).then(r => (r && r.ok) ? r.json() : null).then(j => {
+    if (j && j.quit) pureRemoteQuit();
+  }).catch(() => {});
+}
+// 桌面端右键「退出速写」：等同于点「结束」，结束这一组并回到主界面
+function pureRemoteQuit() {
+  if (_pureQuitDone) return;
+  _pureQuitDone = true;
+  if (S.phase === "idle") return;
+  finish();
+}
+function petClockStart() {
+  petTimerPush();
+  if (!_pureClockId) _pureClockId = setInterval(petTimerPush, 1000);
+}
+function petClockStop() {
+  if (_pureClockId) { clearInterval(_pureClockId); _pureClockId = 0; }
+  petFetch("/pet?cmd=timer&left=-1");
+}
+
+// ---- 桌宠偏好（只剩 置顶），记住用户选择 ----
+const PET_TOP_KEY = "sketchPetTopV1";
+function petBool(key, dflt) {
+  try { const v = localStorage.getItem(key); return v === null ? dflt : v === "1"; } catch (e) { return dflt; }
+}
+function petSetBool(key, on) { try { localStorage.setItem(key, on ? "1" : "0"); } catch (e) {} }
+function petPrefTop() { return petBool(PET_TOP_KEY, true); }
+function updateSwRow(rowId, attr, on) {
+  const row = $(rowId); if (!row) return;
+  const val = on ? "1" : "0";
+  row.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c.dataset[attr] === val));
+}
+function bindSw(rowId, attr, key, initial) {
+  updateSwRow(rowId, attr, initial);
+  const row = $(rowId); if (!row) return;
+  row.addEventListener("click", e => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    const on = b.dataset[attr] === "1";
+    updateSwRow(rowId, attr, on);
+    petSetBool(key, on);
+    if (key === PET_TOP_KEY) petTopmost(on);
+  });
+}
+bindSw("pet-top-row", "petTop", PET_TOP_KEY, petPrefTop());
+// 开始一组练习时按偏好设置桌宠（只剩「窗口置顶」这一项偏好）
+function currentRefSrc() {
+  if (!refKey()) return null;                 // 没有参考图就不给图
+  return S.images[refIdx] || S.images[0] || null;
+}
+function petSessionBegin() {
+  if (petPrefTop()) petTopmost(true);
+}
+
+// ---------- 出题：按上传的参考图轮播出题 ----------
+function buildQueue() {
+  const n = Math.max(1, Math.floor(S.count || 0)) || 10; // 张数兜底
+  if (!S.images.length) return false;
+  S.queue = Array.from({ length: n }, (_, i) => ({ img: S.images[i % S.images.length] }));
+  return true;
+}
+// ---------- 计时核心 ----------
+function showScreen(name) {
+  ["welcome", "guide", "admin", "practice", "summary", "ref", "settings"].forEach(s => $("screen-" + s).hidden = s !== name);
+  if (name !== "ref") {
+    const f = $("bili-player"); // 离开参考页时停止播放
+    if (f && f.getAttribute("src")) { const s0 = f.src; f.src = s0; }
+  }
+}
+function renderPrompt() {
+  const item = S.queue[S.idx];
+  if (!item) { $("prog-line").textContent = "还没有参考图，请先上传"; return; }
+  $("prog-line").textContent = progLine();
+  if (item.img) {
+    $("prompt-box").innerHTML = `<img src="${item.img}" alt="参考图">`;
+  } else {
+    $("prompt-box").innerHTML = `<div><span class="txt">还没有参考图，请先上传</span></div>`;
+  }
+  pureSyncImage();   // 桌面端大图跟着换到当前这张（休息时则提前预推下一张）
+}
+function startPhase(phase, seconds) {
+  S.phase = phase; S.totalPhase = seconds; S.remaining = seconds;
+  S.paused = false; S.endAt = Date.now() + seconds * 1000;
+  S.phaseStart = Date.now(); S.goalHit = false;
+  S.liveSec = 0; S.lastTickAt = Date.now();
+  const labels = { draw: tr("绘制中"), rest: tr("休息一下"), ready: tr("预备") };
+  $("phase-text").textContent = labels[phase];
+  $("phase-text").className = "p" + (phase === "draw" ? "" : " rest-note");
+  $("ring").classList.toggle("rest", phase !== "draw");
+  const wrap = document.querySelector(".ring-wrap");
+  // 进度条开始转（进入绘制）→ 滴答声起，一直到本段归零才停（默认就有，没有开关）
+  if (phase === "draw") {
+    wrap.classList.toggle("timer-off", S.timing === "none");
+    if (S.timing === "none") $("time-text").textContent = "自由练习";
+    else if (S.timing === "up") $("time-text").textContent = "0";
+    $("btn-skip").textContent = (S.timing === "down") ? "跳过" : "下一张";
+    renderPrompt();
+    if (S.timing !== "none") startTick();   // 不计时：不播滴答声
+  } else {
+    wrap.classList.remove("timer-off");
+  }
+  clearInterval(S.timer);
+  S.timer = setInterval(tick, 100);
+  tick();
+}
+const MILESTONES = [180, 60, 30, 10]; // 3分钟 / 1分钟 / 30秒 / 10秒
+const MILESTONE_LABEL = { 180: "3分钟", 60: "1分钟", 30: "30秒", 10: "10秒" };
+// 语音播报专用文案：用速写专业说法（界面文字不变，只有语音这么说）
+const SPEAK_LINES = {
+  ready: "准备起笔，先看清楚动态线和重心",
+  start: "开画，先抓大势，长线一笔到底",
+  rest: "休息二十秒，先看下一题的大形和动势",
+  countdown: s => `倒计时 ${s}`,
+  go: "GO！开画！",
+  skip: "换下一张，重新起笔",
+  pause: "先停一下，别急着收笔",
+  resume: "继续，注意线条节奏和起收笔"
+};
+function tick() {
+  if (S.paused) return;
+  // 实时累计「这一张已画秒数」（暂停时不计），用来判断当天有没有画满 1 小时
+  const _now = Date.now();
+  if (S.phase === "draw" && S.lastTickAt) S.liveSec += (_now - S.lastTickAt) / 1000;
+  S.lastTickAt = _now;
+  if (_now - lastGoalCheck >= 1000) { lastGoalCheck = _now; checkDailyGoal(); }
+  const left = Math.max(0, (S.endAt - Date.now()) / 1000);
+  const prev = S.remaining; S.remaining = left;
+  const c0 = Math.ceil(left), pc = Math.ceil(prev);
+
+  // 正向计时：显示已过时间，进度环按目标时长填充，到目标轻提示，不自动切换
+  if (S.phase === "draw" && S.timing === "up") {
+    const el = (Date.now() - S.phaseStart) / 1000;
+    const c = Math.floor(el);
+    $("time-text").textContent = c >= 100
+      ? `${Math.floor(c / 60)}:${String(c % 60).padStart(2, "0")}`
+      : c;
+    const frac = Math.min(el / S.dur, 1);
+    $("ring").setAttribute("stroke-dashoffset", CIRC * (1 - frac));
+    if (!S.goalHit && el >= S.dur) { S.goalHit = true; beep(880, 200); } // 到达目标轻提示（不强制切换）
+    return;
+  }
+  // 不计时：自由练习，不跑时钟，也不自动切换（手动点「下一张」）
+  if (S.phase === "draw" && S.timing === "none") return;
+
+  // 倒计时（含预备 / 休息）的原有显示与提示逻辑
+  $("time-text").textContent = c0 >= 100
+    ? `${Math.floor(c0 / 60)}:${String(c0 % 60).padStart(2, "0")}`
+    : c0;
+  $("ring").setAttribute("stroke-dashoffset", CIRC * (1 - left / S.totalPhase));
+  if (pc !== c0) {
+    if (S.phase === "ready") {
+      tickTock(true); // 3-2-1 预备倒数
+    } else if (S.phase === "draw") {
+      if (MILESTONES.includes(c0) && c0 < S.totalPhase) {
+        speakSeq([{ file: clipForCountdown(c0), text: SPEAK_LINES.countdown(durLabel(c0)) }]); // 关键节点语音播报
+        tickTock(false);
+        setTimeout(() => tickTock(true), 180);
+      } else if (c0 <= TICK_FROM && c0 >= 1) {
+        // 最后 10 秒：停掉滴答，改用原来的默认提示音（逐秒升调），收尾更明确
+        tickFinalOn();
+        beep(650 + (10 - c0) * 60, 120);
+      }
+    }
+  }
+  if (left <= 0) phaseDone();
+}
+function phaseDone() {
+  clearInterval(S.timer);
+  stopTick();   // 本段计时结束，滴答声立刻停
+  if (S.phase === "ready") {
+    beep(1046, 250);
+    $("phase-text").textContent = tr("开画！");
+    $("time-text").textContent = "GO";
+    const tk = ++S.readyToken;
+    if (S.timing === "down") {
+      // 开场只播「倒计时 X」（真实音频），念完再开始走进度条；其余语音（开画/GOGOGO/准备起笔/休息）按需求不再播
+      speakSeq([
+        { file: clipForCountdown(S.dur), text: SPEAK_LINES.countdown(durLabel(S.dur)) },
+        { end: () => {
+            setTimeout(() => { // 语音结束后短暂停留再开始计时
+              if (S.readyToken === tk && S.phase === "ready") startPhase("draw", S.dur);
+            }, 400);
+          } }
+      ]);
+    } else {
+      // 正向 / 不计时：不报倒计时，短暂停留后直接开画
+      setTimeout(() => {
+        if (S.readyToken === tk && S.phase === "ready") startPhase("draw", S.dur);
+      }, 600);
+    }
+    return;
+  }
+  if (S.phase === "draw") {
+    S.doneCount++; S.focusSec += S.dur; saveLog(S.dur);
+    if (S.idx >= S.queue.length - 1) { finish(); return; }
+    beep(523, 200); beep(784, 300, 0.22);
+    S.idx++;
+    renderPrompt(); // 休息时提前展示下一题
+    startPhase("rest", 20);
+  } else {
+    beep(660, 150);
+    startPhase("draw", S.dur);
+  }
+}
+function nextPrompt() {
+  clearInterval(S.timer);
+  stopTick();
+  skipSound();
+  if (S.phase === "ready") { startPhase("draw", S.dur); return; }
+  if (S.phase === "rest") { startPhase("draw", S.dur); return; }
+  // 正向计时 / 不计时：手动切换视为完成当前一张，记录实际已画时长（倒计时模式由 phaseDone 统一记录）
+  if (S.phase === "draw" && (S.timing === "up" || S.timing === "none")) {
+    const el = Math.max(0, (Date.now() - S.phaseStart) / 1000);
+    S.doneCount++; S.focusSec += el; saveLog(el);
+  }
+  if (S.idx >= S.queue.length - 1) { finish(); return; }
+  S.idx++;
+  startPhase("draw", S.dur);
+}
+// ---------- 打卡 ----------
+// 规则：当天累计专注满 1 小时 = 今日打卡成功，日历上点亮一颗实星 ★，未打卡显示空星 ☆
+const LOG_KEY = "sketchLogV1";
+const DAILY_GOAL_SEC = 3600;                       // 每天 1 小时
+function todayStr() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+function dayKey(y, m, d) { return `${y}-${m}-${d}`; }
+function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }   // m 传 1~12
+function getLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || {}; } catch (e) { return {}; } }
+function saveLog(sec) {
+  const log = getLog(); const t = todayStr();
+  log[t] = log[t] || { count: 0, sec: 0 };
+  log[t].count++; log[t].sec += sec;
+  localStorage.setItem(LOG_KEY, JSON.stringify(log));
+  S.liveSec = 0;                                   // 这一段已经记进去了，别重复算
+}
+// 某天是否打卡成功（当天累计专注 ≥ 1 小时）
+function isDayDone(k, log) { return (((log || getLog())[k] || {}).sec || 0) >= DAILY_GOAL_SEC; }
+function todayDone() { return isDayDone(todayStr()); }
+// 当天已画秒数 = 已记录的部分 + 当前这张正在画的部分（暂停不计）
+function todaySecNow() {
+  const t = ((getLog()[todayStr()] || {}).sec) || 0;
+  return t + (S.phase === "draw" ? S.liveSec : 0);
+}
+function calcStreak(log) {
+  const lg = log || getLog();
+  let streak = 0; const d = new Date();
+  if (!isDayDone(todayStr(), lg)) d.setDate(d.getDate() - 1);
+  while (true) {
+    const k = dayKey(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    if (isDayDone(k, lg)) { streak++; d.setDate(d.getDate() - 1); } else break;
+  }
+  return streak;
+}
+// 本月打卡成功的天数
+function monthDoneDays(log) {
+  const lg = log || getLog(), d = new Date(), y = d.getFullYear(), m = d.getMonth() + 1;
+  let n = 0;
+  for (let i = 1; i <= daysInMonth(y, m); i++) if (isDayDone(dayKey(y, m, i), lg)) n++;
+  return n;
+}
+function renderStats() {
+  const log = getLog();
+  const today = log[todayStr()] || { count: 0 };
+  $("st-today").textContent = today.count;
+  $("st-streak").textContent = calcStreak(log);
+  $("st-total").textContent = Object.values(log).reduce((s, v) => s + v.count, 0);
+  renderCheckIn(log);
+  const bars = $("bars"); bars.innerHTML = "";
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const k = dayKey(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const c = (log[k] || {}).count || 0;
+    const h = Math.min(100, c * 10);
+    bars.innerHTML += `<div class="bar-col"><div class="bar ${i === 0 ? "today" : ""}" style="height:${Math.max(3, h * 0.7)}px" title="${c}张"></div><div class="bar-lbl">${d.getMonth() + 1}/${d.getDate()}</div></div>`;
+  }
+  renderStars();
+}
+// 打卡卡片：本月天数 + 今日进度 + 当月 1~31 日星历
+function renderCheckIn(log) {
+  const lg = log || getLog();
+  const d = new Date(), y = d.getFullYear(), m = d.getMonth() + 1, dd = d.getDate();
+  const dim = daysInMonth(y, m);
+  const me = $("dk-month"), dn = $("dk-days"), pg = $("dk-prog"), bar = $("dk-bar"), grid = $("cal");
+  if (me) me.textContent = `${y}年${m}月`;
+  if (dn) dn.textContent = monthDoneDays(lg);
+  const sec = todaySecNow(), done = sec >= DAILY_GOAL_SEC, mm = Math.floor(sec / 60);
+  if (pg) pg.innerHTML = done
+    ? `今日打卡已完成 · 今天画了 <b>${mm}</b> 分钟`
+    : `今日已画 <b>${mm}</b> / 60 分钟 · 还差 <b>${Math.max(1, Math.ceil((DAILY_GOAL_SEC - sec) / 60))}</b> 分钟打卡`;
+  if (bar) bar.style.width = Math.min(100, (sec / DAILY_GOAL_SEC) * 100) + "%";
+  if (!grid) return;
+  grid.innerHTML = "";
+  for (let i = 1; i <= 31; i++) {                   // 固定 1~31 格，本月没有的那几天淡出
+    const okDay = i <= dim, ok = okDay && isDayDone(dayKey(y, m, i), lg);
+    const cls = "cal-cell" + (ok ? " on" : "") + (okDay ? "" : " void") + (i === dd ? " today" : "");
+    const tip = `${m}月${i}日` + (okDay ? (ok ? " 已打卡" : " 未打卡") : "（本月没有这一天）");
+    grid.innerHTML += `<div class="${cls}" title="${tip}"><span class="d">${i}</span><span class="s">${okDay ? (ok ? "★" : "☆") : ""}</span></div>`;
+  }
+}
+// 画满 1 小时的那一下：喜悦音效 + 甜妹人声 + 小兔气泡（只响一次）
+let lastGoalCheck = 0;
+function checkDailyGoal() {
+  const log = getLog(), t = todayStr();
+  const e = log[t] || { count: 0, sec: 0 };
+  if (e.done) return;                                // 今天已经恭喜过了
+  if (todaySecNow() < DAILY_GOAL_SEC) return;
+  log[t] = e; e.done = true;
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch (err) {}
+  celebrateDaily();
+  renderStats();
+  stopDkReminder();                                  // 今天打卡了，就别再催了
+}
+function celebrateDaily() {
+  cheerSound();                                      // 音效：上行琶音 + 高八度小尾巴
+  petSay("恭喜主人今日速写打卡成功！", 9);            // 小兔气泡
+  petExpr("happy");
+  setTimeout(() => { try { speakWith(defaultPreset(), "恭喜主人今日速写打卡成功！"); } catch (e) {} }, 900);
+}
+function cheerSound() {
+  beep(523.25, 150); beep(659.25, 150, 0.13); beep(783.99, 160, 0.26);
+  beep(1046.5, 340, 0.40); beep(1318.5, 320, 0.47);
+}
+// ---------- 小兔待机提醒 / 连续打卡里程碑 ----------
+const MS_KEY = "sketchDkMsV1";                       // 已经祝贺过的连续打卡里程碑
+const REMIND_TEXT = "主人，今的速写还没有打卡哦~";
+const MS_TEXT = {
+  7:  "主人，你已经连续打卡一周啦！主人真棒！今天还继续吗？",
+  30: "主人，你已经连续打卡一个月啦！主人真棒！今天还继续吗？"
+};
+let dkTimer = null, dkLastSay = 0, dkMsChecked = false;
+function msRecord() { try { return JSON.parse(localStorage.getItem(MS_KEY)) || {}; } catch (e) { return {}; } }
+function msMark(n) { try { const r = msRecord(); r[n] = true; localStorage.setItem(MS_KEY, JSON.stringify(r)); } catch (e) {} }
+// 连续打卡满一周 / 满一个月，重新打开小兔时祝贺一次（每个里程碑只祝贺一次）
+function checkMilestone() {
+  const s = calcStreak(getLog()), r = msRecord();
+  const n = s >= 30 ? 30 : (s >= 7 ? 7 : 0);
+  if (!n || r[n]) return false;
+  msMark(n);
+  petSay(MS_TEXT[n], 10);
+  petExpr("happy");
+  setTimeout(() => { try { speakWith(defaultPreset(), MS_TEXT[n]); } catch (e) {} }, 700);
+  return true;
+}
+// 只在小兔开着、且不在陪画（练习中）的时候说话；每 30 分钟提醒一次
+function dkIdleTick() {
+  const p = petFetch("/pet_state");
+  if (!p) return;
+  p.then(r => (r && r.ok) ? r.json() : null).then(j => {
+    if (!j || !j.ok || !j.on) return;                // 没开着小兔（网页单独打开）：静默
+    if (j.companion) return;                          // 正在陪画/练习中，不打扰
+    if (!dkMsChecked) { dkMsChecked = true; checkMilestone(); return; }
+    if (todayDone()) { stopDkReminder(); return; }
+    const now = Date.now();
+    if (dkLastSay && now - dkLastSay < 30 * 60 * 1000) return;
+    dkLastSay = now;
+    petSay(REMIND_TEXT, 8);
+  }).catch(() => {});
+}
+function startDkReminder() {
+  if (dkTimer) return;
+  dkTimer = setInterval(dkIdleTick, 30000);
+  setTimeout(dkIdleTick, 20000);                      // 打开小兔约 20 秒后来第一次
+}
+function stopDkReminder() { if (dkTimer) { clearInterval(dkTimer); dkTimer = null; } }
+// ---------- 星级成就体系（最高 5 星） ----------
+// 规则刻意简单：一张综合「速写值」，五个门槛对应五颗星
+//   速写值 = 累计张数 + 打卡天数×2 + 连续天数×5 + 累计专注分钟×0.5
+const STAR_TIERS = [
+  { star: 1, name: "起笔萌新", need: 1 },
+  { star: 2, name: "手感初成", need: 30 },
+  { star: 3, name: "线条稳定", need: 100 },
+  { star: 4, name: "速写达人", need: 300 },
+  { star: 5, name: "速写大师", need: 800 }
+];
+const STAR_FULL = "★", STAR_EMPTY = "☆";
+function logSummary(log) {
+  const arr = Object.values(log || {});
+  return {
+    total: arr.reduce((s, v) => s + (v.count || 0), 0),
+    sec: arr.reduce((s, v) => s + (v.sec || 0), 0),
+    days: Object.keys(log || {}).length,
+    streak: calcStreak(log || {}),
+    today: (log && log[todayStr()] && log[todayStr()].count) || 0
+  };
+}
+function starInfo(log) {
+  const s = logSummary(log);
+  const val = Math.round(s.total + s.days * 2 + s.streak * 5 + (s.sec / 60) * 0.5);
+  let idx = -1;
+  for (let i = 0; i < STAR_TIERS.length; i++) if (val >= STAR_TIERS[i].need) idx = i;
+  const cur = idx >= 0 ? STAR_TIERS[idx] : null;
+  const next = idx + 1 < STAR_TIERS.length ? STAR_TIERS[idx + 1] : null;
+  const from = cur ? cur.need : 0;
+  const to = next ? next.need : 1;
+  const pct = next ? Math.max(0, Math.min(100, ((val - from) / (to - from)) * 100))
+                   : (cur ? 100 : 0);
+  return Object.assign({}, s, {
+    val, star: cur ? cur.star : 0, name: cur ? cur.name : "还没起笔",
+    next, pct: Math.round(pct), need: next ? Math.max(0, next.need - val) : 0
+  });
+}
+function starsOf(info) {
+  return STAR_FULL.repeat(info.star) + STAR_EMPTY.repeat(Math.max(0, 5 - info.star));
+}
+function starBlockHTML(info) {
+  const tip = info.next
+    ? `速写值 ${info.val} · 距离 ${info.next.star} 星「${info.next.name}」还差 ${info.need}`
+    : `速写值 ${info.val} · 已满级，你就是速写大师`;
+  return `<div class="star-line">
+      <span class="star-icons">${STAR_FULL.repeat(info.star)}<span class="off">${STAR_EMPTY.repeat(Math.max(0, 5 - info.star))}</span></span>
+      <span class="star-name">${info.name}</span>
+    </div>
+    <div class="star-wrap" style="margin-top:10px">
+      <div class="star-bar"><i style="width:${info.pct}%"></i></div>
+    </div>
+    <div class="star-tip">${tip}</div>`;
+}
+function renderStars() {
+  const info = starInfo(getLog());
+  const sp = $("sum-star");                  // 结算页的星级面板（侧栏顶部已换成「本月打卡天数」）
+  if (sp) sp.innerHTML = starBlockHTML(info);
+  const rb = $("star-rule");
+  if (rb && !rb.hidden) renderStarRule();   // 规则面板开着时同步刷新「你现在…」
+}
+// 打卡规则说明：点打卡标题旁的「打卡规则 ❗️」展开
+function renderStarRule() {
+  const box = $("star-rule"); if (!box) return;
+  const info = starInfo(getLog());
+  const rows = STAR_TIERS.slice().reverse().map(t =>
+    `<div class="rule-row">
+       <span class="rs">${STAR_FULL.repeat(t.star)}<span class="off">${STAR_EMPTY.repeat(5 - t.star)}</span></span>
+       <span class="rn">${t.name}</span>
+       <span class="rv">速写值 ${t.need}</span>
+     </div>`).join("");
+  const sec = todaySecNow(), mm = Math.floor(sec / 60);
+  const now = sec >= DAILY_GOAL_SEC
+    ? `今日打卡已完成（${mm} 分钟），明天继续就能把连续天数 +1`
+    : `今日已画 ${mm} 分钟，还差 ${Math.max(1, Math.ceil((DAILY_GOAL_SEC - sec) / 60))} 分钟点亮今天的 ★`;
+  box.innerHTML = `
+    <div class="rt">打卡规则</div>
+    <div class="rf">当天累计专注满 60 分钟 = 今日打卡成功，日历上点亮一颗实星 ★</div>
+    <div class="rule-ul">
+      <div>· 一天里分几次练也会累加，凑满 1 小时就算打卡</div>
+      <div>· 日历上 1~31 日：已打卡 = 实星 ★，未打卡 = 空星 ☆</div>
+      <div>· 打卡成功会响一声恭喜音效，小兔也会来祝贺你</div>
+      <div>· 连续 7 天 / 30 天，小兔会专门夸你一次</div>
+    </div>
+    <div class="rt" style="margin-top:10px">速写值星级</div>
+    <div class="rf">速写值 = 累计张数 + 打卡天数×2 + 连续天数×5 + 累计专注分钟×0.5</div>
+    ${rows}
+    <div class="rule-now">${now}${info.next ? ` · 当前 ${info.star} 星「${info.name}」` : " · 已满级"}</div>`;
+}
+$("btn-star-rule") && $("btn-star-rule").addEventListener("click", () => {
+  const box = $("star-rule"), btn = $("btn-star-rule");
+  renderStarRule();
+  box.hidden = !box.hidden;
+  btn.classList.toggle("ok", !box.hidden);
+});
+// ---------- 分享 ----------
+function shareText() {
+  const info = starInfo(getLog());
+  const min = Math.round(info.sec / 60);
+  return [
+    "我的DQ小兔速写打卡",
+    `${starsOf(info)} ${info.name}`,
+    `今日 ${info.today} 张 · 连续 ${info.streak} 天 · 累计 ${info.total} 张 · 累计专注 ${min} 分钟`,
+    `速写值 ${info.val}${info.next ? `，距离 ${info.next.star} 星还差 ${info.need}` : "，已满级"}`,
+    "—— 用 DQ小兔速写计时姬，每天十分钟练动态感"
+  ].join("\n");
+}
+function shareStatus(msg) { const el = $("share-status"); if (el) el.textContent = msg; }
+function copyText(t) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+  } catch (e) {}
+  return new Promise((res, rej) => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = t; ta.style.position = "fixed"; ta.style.top = "-100px";
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      ok ? res() : rej(new Error("copy failed"));
+    } catch (e) { rej(e); }
+  });
+}
+function openShare(url) { try { window.open(url, "_blank", "noopener"); } catch (e) {} }
+function bindShare(id, fn) { const b = $(id); if (b) b.addEventListener("click", fn); }
+bindShare("btn-share-wx", () => { // 微信无网页直连接口：复制文案 + 引导粘贴
+  copyText(shareText())
+    .then(() => shareStatus("文案已复制，打开微信粘贴给好友或发朋友圈即可"))
+    .catch(() => shareStatus("复制失败，请手动复制下方统计数字"));
+});
+bindShare("btn-share-qq", () => { // QQ 网页分享组件
+  const url = "https://connect.qq.com/widget/shareqq/index.html?url=" +
+    encodeURIComponent(location.href) + "&title=" +
+    encodeURIComponent("我的DQ小兔速写打卡") + "&summary=" + encodeURIComponent(shareText());
+  openShare(url);
+  shareStatus("已打开 QQ 分享窗口（被拦截的话点「复制文案」手动发）");
+});
+bindShare("btn-share-x", () => { // X（Twitter）网页 intent
+  openShare("https://twitter.com/intent/tweet?text=" + encodeURIComponent(shareText()));
+  shareStatus("已打开 X 分享窗口（被拦截的话点「复制文案」手动发）");
+});
+bindShare("btn-share-copy", () => {
+  copyText(shareText())
+    .then(() => shareStatus("已复制打卡文案到剪贴板"))
+    .catch(() => shareStatus("复制失败，请手动选择文案"));
+});
+// ---------- 流程 ----------
+$("btn-start").addEventListener("click", () => {
+  syncImages();   // 兜底：确保 S.images 一定是当前上传的这批图
+  if (!buildQueue()) {
+    alert("请先上传至少一张参考图");
+    return;
+  }
+  S.idx = 0; S.doneCount = 0; S.focusSec = 0;
+  primeTick();   // 趁这次真实点击把滴答音频解锁，保证开画时一定能出声
+  compSessionBegin();   // 桌宠陪画：计时模式让桌宠一起进入专注
+  petSessionBegin();    // 桌宠偏好：按设置置顶
+  showScreen("practice");
+  renderPrompt(); // 预备阶段先展示第一题
+  beep(660, 150);
+  startPhase("ready", 3);
+  // 参考图模式：开练后隐藏全部 UI，只留一张置顶的当前参考图
+  // （纯净模式；滚轮缩放、右键另存、双击唤回）
+  if (refKey() && S.images.length) {
+    const src = currentRefSrc();
+    // 立即弹出大图（不再等 300ms）：图早在上传时就预推过，桌面端用缓存直接显示
+    if (src) petPureStart(src);
+  }
+});
+$("btn-pause").addEventListener("click", () => {
+  if (S.paused) {
+    S.paused = false; S.endAt = Date.now() + S.remaining * 1000;
+    $("btn-pause").textContent = "暂停";
+    resumeSound();
+  } else {
+    S.paused = true; $("btn-pause").textContent = "继续";
+    stopTick();          // 暂停时滴答声也要停
+    pauseSound();
+  }
+});
+$("btn-skip").addEventListener("click", nextPrompt);
+$("btn-quit").addEventListener("click", () => { clearInterval(S.timer); stopTick(); finish(); });
+function finish() {
+  clearInterval(S.timer);
+  stopTick();
+  compSessionEnd();   // 结束陪画：让桌宠退出专注状态
+  petPureEnd();       // 若在纯净参考图模式：退出并唤回主界面
+  S.phase = "idle"; S.readyToken++; // 使延迟中的计时启动失效
+  beep(523, 200); beep(659, 200, 0.2); beep(784, 400, 0.4);
+  $("sum-count").textContent = S.doneCount;
+  $("sum-time").textContent = S.focusSec;
+  $("sum-streak").textContent = calcStreak(getLog());
+  $("sum-cheer").textContent = tr(S.doneCount >= S.count ? "太棒了，整组完成！手感就是这样练出来的" :
+    S.doneCount > 0 ? "完成一部分也是进步，明天继续加油" : "没关系，准备好再开始一轮吧");
+  renderStats();
+  showScreen("summary");
+}
+$("btn-again").addEventListener("click", () => $("btn-start").click());
+$("btn-back").addEventListener("click", () => showScreen("welcome"));
+// ---------- B站参考视频列表 ----------
+const VIDEOS = [
+  { bv: "BV1k7421N7jn", aid: 1650360619, cid: 1434312412, t: "2023超速速涂系列告一段落！2024-BA碧蓝档案绘制年启动！", d: "2024/02/08", dur: "00:20" },
+  { bv: "BV147421N7pY", aid: 1650345703, cid: 1431662310, t: "【原速】【232】碧蓝档案-礼服日奈 色彩速涂练习！", d: "2024/02/06", dur: "1:28:33" },
+  { bv: "BV1Pp421o7CE", aid: 1850304101, cid: 1431661508, t: "【232】碧蓝档案-礼服日奈 色彩速涂练习！", d: "2024/02/06", dur: "04:36" },
+  { bv: "BV1Y2421c7Rq", aid: 1600465381, cid: 1430573597, t: "【231】碧蓝档案-下江小春系列练习！", d: "2024/02/05", dur: "04:36" },
+  { bv: "BV1TA4m1L76U", aid: 1100010514, cid: 1427296478, t: "【原速】【230】碧蓝档案-礼服日奈 色彩速涂临摹练习！", d: "2024/02/02", dur: "1:16:08" },
+  { bv: "BV1KZ421r7PX", aid: 1150016648, cid: 1427305342, t: "【230】碧蓝档案-礼服日奈 色彩速涂临摹练习ing!", d: "2024/02/02", dur: "04:36" },
+  { bv: "BV116421g7ic", aid: 1400174436, cid: 1425726336, t: "【229】碧蓝档案-下江小春~色彩速涂临摹练习ing!", d: "2024/01/31", dur: "04:36" },
+  { bv: "BV1nt421H7pa", aid: 1800170584, cid: 1424958865, t: "【原速让她哭！】【228】练习让她哭！让她哭！", d: "2024/01/31", dur: "1:43:32" },
+  { bv: "BV1VK42117Jy", aid: 1700153334, cid: 1424957721, t: "【228】让她哭！让她哭！DQ日常速涂训练~", d: "2024/01/31", dur: "04:36" },
+  { bv: "BV1FF4m1u7BA", aid: 1200100566, cid: 1423884665, t: "【原速】【227】小小临摹一下比基尼~", d: "2024/01/30", dur: "1:49:35" },
+  { bv: "BV1EJ4m147x4", aid: 1250228759, cid: 1423884133, t: "【227】小小临摹一下比基尼~", d: "2024/01/30", dur: "04:36" },
+  { bv: "BV1Ke41177gC", aid: 241965349, cid: 1422286627, t: "【226】DQ速写L8全流程！", d: "2024/01/28", dur: "04:36" },
+  { bv: "BV1ec411v7Ls", aid: 284358745, cid: 1421898999, t: "【原速接近4小时慢慢看】【225】小小临摹一下初音！", d: "2024/01/28", dur: "3:32:31" },
+  { bv: "BV1Ze411Y72u", aid: 239328240, cid: 1421923730, t: "【225】小小临摹一下初音！", d: "2024/01/28", dur: "04:36" },
+  { bv: "BV1ce411J7Xa", aid: 241851650, cid: 1421147497, t: "【224】DQ速写！WAKE！", d: "2024/01/27", dur: "04:36" },
+  { bv: "BV1xc411v7XY", aid: 284303177, cid: 1420905381, t: "【原速】【223】DQ速写！WAKE！", d: "2024/01/27", dur: "1:49:56" },
+  { bv: "BV1LW4y1c7q6", aid: 966753208, cid: 1420900195, t: "【223】DQ速写！WAKE！", d: "2024/01/27", dur: "04:36" },
+  { bv: "BV1yT4y147GN", aid: 924349042, cid: 1419555657, t: "【原速1小时】【222】稻香&Animation Style", d: "2024/01/26", dur: "1:08:26" },
+  { bv: "BV17e411J7Kt", aid: 241866040, cid: 1419554701, t: "【221】稻香&Animation Style", d: "2024/01/26", dur: "03:44" },
+  { bv: "BV18b4y1N7ag", aid: 624129239, cid: 1418235289, t: "【221】DQ雷姆？", d: "2024/01/25", dur: "03:55" },
+  { bv: "BV1Wa4y1k7dk", aid: 666660738, cid: 1417106557, t: "【原速】【群友改图玩】【220】归期！", d: "2024/01/24", dur: "2:28:34" },
+  { bv: "BV1pe411E7MC", aid: 241724713, cid: 1417105630, t: "【220】归期！", d: "2024/01/24", dur: "04:40" },
+  { bv: "BV1xb4y1N7wf", aid: 624079298, cid: 1415020864, t: "【219】消失的旧时光1943~", d: "2024/01/22", dur: "03:16" },
+  { bv: "BV1ca4y117Xj", aid: 666608425, cid: 1414725813, t: "【218】画一下二次元女头~", d: "2024/01/21", dur: "02:59" },
+  { bv: "BV1Zg4y1m7yb", aid: 836423217, cid: 1410466118, t: "【原速】【217】龙年当然要画龙女！", d: "2024/01/18", dur: "1:48:17" },
+  { bv: "BV13C4y1C7tm", aid: 793879987, cid: 1410464900, t: "【217】龙年当然要画龙女！", d: "2024/01/18", dur: "02:54" },
+  { bv: "BV1864y1K7xT", aid: 581037150, cid: 1401905235, t: "【216】各种手绘画练习·····Talk Dirty·····太难了！", d: "2024/01/10", dur: "02:58" },
+  { bv: "BV1Kg4y1S7cX", aid: 836079646, cid: 1399485321, t: "【215】Talk Dirty", d: "2024/01/09", dur: "02:58" },
+  { bv: "BV18K411x7ma", aid: 495931452, cid: 1397816746, t: "【原速】【214】DQ直播速写~", d: "2024/01/07", dur: "1:24:55" },
+  { bv: "BV1w94y1u76H", aid: 368424416, cid: 1397804814, t: "【原速3小时+】【213】1.7日直播画画~", d: "2024/01/07", dur: "3:13:28" }
+];
+let lastBv = null;
+function renderVideoList() {
+  $("v-list").innerHTML = VIDEOS.map((v, i) =>
+    `<button class="v-card" data-i="${i}">
+       <div class="t">${v.t}</div>
+       <div class="m"><span>${v.d}</span><span class="dur">${v.dur}</span></div>
+     </button>`).join("");
+}
+function playVideo(bv, aid, cid) {
+  lastBv = bv;
+  $("ref-list").hidden = true;
+  $("ref-player").hidden = false;
+  $("bili-player").src = `https://player.bilibili.com/player.html?isOutside=true&aid=${aid}&bvid=${bv}&cid=${cid}&p=1`;
+}
+function showRefList() {
+  $("ref-player").hidden = true;
+  $("ref-list").hidden = false;
+  const f = $("bili-player"); if (f.getAttribute("src")) { const s0 = f.src; f.src = s0; } // 停止播放
+}
+$("v-list").addEventListener("click", e => {
+  const c = e.target.closest(".v-card"); if (!c) return;
+  const v = VIDEOS[+c.dataset.i];
+  playVideo(v.bv, v.aid, v.cid);
+});
+// 欢迎屏的开始按钮：直接复用 #btn-start 的完整流程（参考图模式会自动进纯净模式）
+$("btn-welcome-start").addEventListener("click", () => $("btn-start").click());
+$("btn-guide-start").addEventListener("click", () => $("btn-start").click());
+$("btn-open-settings").addEventListener("click", () => { showScreen("settings"); });
+$("btn-settings-back").addEventListener("click", () => showScreen("welcome"));
+$("btn-ref-back").addEventListener("click", () => showScreen("welcome"));
+$("btn-back-list").addEventListener("click", showRefList);
+$("btn-shuffle-video").addEventListener("click", () => {
+  let v;
+  do { v = VIDEOS[Math.floor(Math.random() * VIDEOS.length)]; }
+  while (VIDEOS.length > 1 && v.bv === lastBv);
+  playVideo(v.bv, v.aid, v.cid);
+});
+// ---------- 设置栏收起/展开 ----------
+$("btn-settings").addEventListener("click", () => {
+  $("sidebar").classList.add("hidden-sb");
+  document.body.classList.add("sb-collapsed");
+});
+$("btn-expand").addEventListener("click", () => {
+  $("sidebar").classList.remove("hidden-sb");
+  document.body.classList.remove("sb-collapsed");
+});
+renderStats();
+startDkReminder();   // 小兔待机提醒 + 连续打卡里程碑（网页单独打开时会自动静默）
+applyTheme((function(){ try { return localStorage.getItem(THEME_KEY) || "light"; } catch (e) { return "light"; } })());
+// 打开就是简体中文：老版本会按系统语言把 "en" 写进本地记录（日语那档已删，也可能
+// 留着 "ja"），这里做一次性归位 —— 之后在设置页手动切英文照样记得住
+(function () {
+  try {
+    const MIG = "sketchLangZhV1";
+    if (!localStorage.getItem(MIG)) {
+      localStorage.setItem(LANG_KEY, "zh");
+      localStorage.setItem(MIG, "1");
+    }
+    if (!localStorage.getItem(LANG_KEY)) localStorage.setItem(LANG_KEY, detectLang());
+  } catch (e) {}
+})();
+markOpt("lang-list", "data-lang", currentLang());
+if (currentLang() !== "zh") translateAll();
+</script>
+</body>
+</html>
