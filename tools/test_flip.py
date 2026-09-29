@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
-"""参考图翻转自检：像素级镜像 + 真进程热键链路。
+"""参考图翻转自检：像素级镜像 + 右键菜单入口 + 「不许抢 H 键」。
 
-A 段（离屏，不建窗）：左右不对称的图，_flip_source() 应给出镜像结果，缓存可复用、换图会作废。
-B 段（真进程）：起源码桌宠 → 送一张不对称图进纯净模式 → 找到大图窗口 →
-   发 WM_HOTKEY（就是 Windows 投递 H 的那种消息）→ 日志里应出现「参考图镜像翻转：开」；
-   再发一次 → 「关」；退出纯净模式后 H 必须被释放（测试进程能重新注册到 H）。
+A 段（离屏，不建窗）：左右不对称的图，_flip_source() 应给出镜像结果，缓存可复用、换图会作废；
+   再走一次 menu_cmd(24)（就是右键菜单那一项）验证开/关来回切。
+B 段（真进程）：起桌宠 → 送图进纯净模式 → 找到大图窗口 →
+   ① 测试进程**还能注册到 H**（说明小兔没抢键，这就是「打字打不出 H」的根因回归点）；
+   ② 强行投一条 WM_HOTKEY 过去，**不应该翻转**（热键链路已删干净）。
+
+⚠️ 2026-09-29：全局快捷键 H 已整条删除，翻转只保留参考图上右键菜单那一项。
 
 用法：
   python tools/test_flip.py                 # 跑源码桌宠
@@ -133,9 +136,19 @@ def part_offscreen():
     ok("关掉翻转后回到原图", pw._flip_source().getpixel((0, 0)) == RED)
     ok("空图时安全返回（不会炸）", P.PetWindow(kind="pure")._flip_source() is None)
 
+    # 右键菜单那一项：命令 24 → toggle_flip（现在是唯一入口）
+    ok("菜单文案是「水平翻转参考图」（不带快捷键提示）",
+       getattr(P, "FLIP_MENU_TEXT", "") == "水平翻转参考图", getattr(P, "FLIP_MENU_TEXT", ""))
+    pw._pure_img = asym_image()
+    pw._pure_base = pw._pure_img.size
+    pw.menu_cmd(24)
+    ok("右键菜单 24 打开翻转", pw.flip_h is True)
+    pw.menu_cmd(24)
+    ok("再点一次关掉翻转", pw.flip_h is False)
+
 
 def part_hotkey():
-    print("\n【B 真进程：H 键 → 翻转 → 退出后还键】")
+    print("\n【B 真进程：小兔不许抢 H 键】")
     base = len(logtext())
     cmd = [TARGET, "--no-page"] if TARGET else [sys.executable, SRC, "--no-page"]
     print("[i] 启动：" + cmd[0])
@@ -157,32 +170,26 @@ def part_hotkey():
         hwnd = find_pure()
         ok("纯净大图窗口已建出来", bool(hwnd), str(hwnd))
         tail = logtext()[base:]
-        ok("进纯净模式时注册了 H", "翻转快捷键 H 已注册" in tail, tail[-200:])
+        ok("进纯净模式时不注册任何热键", "翻转快捷键 H 已注册" not in tail, tail[-200:])
 
+        # 关键点：纯净模式里 H 还是自由的（别的程序 / 主人打字能正常用）
+        got = u.RegisterHotKey(None, 0x7AB1, MOD_NOREPEAT, VK_H)
+        ok("纯净模式里 H 仍可注册（小兔没抢键，打字不受影响）", bool(got))
+        if got:
+            u.UnregisterHotKey(None, 0x7AB1)
+
+        # 就算有人硬塞一条 WM_HOTKEY 过来，也不该翻转
         u.PostMessageW(hwnd, WM_HOTKEY, HOTKEY_FLIP_ID, 0)
         time.sleep(0.8)
-        ok("收到 H 后翻转成「开」", "参考图镜像翻转：开" in logtext()[base:])
+        ok("热键消息不再触发翻转", "参考图镜像翻转：开" not in logtext()[base:])
 
-        u.PostMessageW(hwnd, WM_HOTKEY, HOTKEY_FLIP_ID, 0)
-        time.sleep(0.8)
-        ok("再按一次翻转成「关」", "参考图镜像翻转：关" in logtext()[base:])
-
-        # 退出纯净模式：H 必须还回来（这里用「能不能重新注册到 H」来证明）
         try:
             urllib.request.urlopen("http://127.0.0.1:18765/pet?cmd=pure_end", timeout=5).read()
         except Exception:
             pass
         time.sleep(1.2)
-        got = u.RegisterHotKey(None, 0x7AB1, MOD_NOREPEAT, VK_H)
-        ok("退出纯净模式后 H 已释放（别的程序能注册到）", bool(got))
-        if got:
-            u.UnregisterHotKey(None, 0x7AB1)
-        ok("退出时有释放日志", "翻转快捷键 H 已释放" in logtext()[base:])
-
-        # 释放之后再按 H 不应该有反应（大图已经不在纯净模式）
-        newtail = logtext()[base:]
-        ok("退出后不再响应 H（不会偷偷翻转）",
-           newtail.count("参考图镜像翻转：开") == 1, newtail[-200:])
+        ok("退出纯净模式也没有「释放热键」这类日志",
+           "翻转快捷键 H 已释放" not in logtext()[base:])
     finally:
         env = dict(os.environ, MSYS_NO_PATHCONV="1")
         subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],

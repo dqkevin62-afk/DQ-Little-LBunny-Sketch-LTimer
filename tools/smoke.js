@@ -142,15 +142,22 @@ ok("字体栈仍写死在 CSS 变量里",
   /--font-r:[^;]*MiSans Regular/.test(css) && /--font-b:[^;]*MiSans Regular/.test(css));
 ok("字体仍由 misans.css 引入", /href="assets\/fonts\/misans\.css"/.test(html));
 
-const VER = "V1.0.0";   // 改版本必须同步：index.html 侧栏 + desktop/xiaotu_pet.py 卡片 + CHANGELOG.md
+// 改版本只改 index.html 里的 APP_VER（侧栏 + 桌面 exe 都从那儿读），并给 CHANGELOG 加一节
+const VER = "V1.1";
 console.log("\n【标题改为 DQ小兔速写计时姬 + 小小的 " + VER + "】");
 const sbH1 = d.querySelector("#sidebar h1");
 ok("侧栏标题已改名", sbH1.textContent.replace(/\s+/g, "") === "DQ小兔速写计时姬" + VER);
 ok("标题文字是 DQ小兔速写计时姬", /^DQ小兔速写计时姬/.test(sbH1.textContent.trim()));
 ok("版本号是 " + VER, sbH1.querySelector(".ver") && sbH1.querySelector(".ver").textContent === VER);
 ok("版本号在标题内（显示在旁边）", sbH1.querySelector(".ver") !== null);
-ok("桌面端卡片版本号也是 " + VER,
-  fs.readFileSync(path.join(ROOT, "desktop", "xiaotu_pet.py"), "utf8").includes(VER + " · 一起练速写吧"));
+// 版本号只有一个来源：index.html 的 APP_VER（侧栏 + 桌面 exe 都跟着它）
+ok("版本号只写在一处（index.html 的 APP_VER）",
+  new RegExp('const APP_VER = "' + VER + '";').test(html) && !/V1\.0\.0/.test(html));
+ok("侧栏版本号由 APP_VER 自动填上（不用手改 HTML）",
+  /id="app-ver"/.test(html) && /\$\("app-ver"\)\.textContent = APP_VER/.test(html));
+ok("桌面端卡片版本号跟着 APP_VER 走（不再写死在 py 里）",
+  /"%s · 一起练速写吧" % app_version\(\)/.test(
+    fs.readFileSync(path.join(ROOT, "desktop", "xiaotu_pet.py"), "utf8")));
 ok("版本号样式很小", /#sidebar h1 \.ver\s*\{[^}]*font-size:\s*10px/s.test(css));
 ok("版本号不抢主标题字重", /#sidebar h1 \.ver\s*\{[^}]*font-weight:\s*400/s.test(css));
 ok("浏览器标签页标题同步", /<title>DQ小兔速写计时姬 · 二次元美少女篇<\/title>/.test(html));
@@ -1058,7 +1065,7 @@ ok("桌面端含 图片另存为 与 显示主界面 菜单",
 ok("桌面端注册双击 + 滚轮消息",
   pet.includes("CS_DBLCLKS") && pet.includes("WM_LBUTTONDBLCLK") && pet.includes("WM_MOUSEWHEEL"));
 
-console.log("\n【参考图翻转：右键菜单 / 快捷键 H】");
+console.log("\n【参考图翻转：只走右键菜单，没有快捷键】");
 ok("桌面端用 PIL 左右镜像", /FLIP_LEFT_RIGHT/.test(pet) && /def _flip_source\(self\)/.test(pet));
 ok("镜像结果缓存一份（缩放重采样不每次重转）",
   /self\._pure_img_flip = self\._pure_img\.transpose/.test(pet) &&
@@ -1068,29 +1075,41 @@ ok("有 toggle_flip 来回切换",
   /def toggle_flip\(self\)/.test(pet) && /self\.flip_h = not self\.flip_h/.test(pet));
 ok("翻转后原地重绘（窗口中心不动、倍率不变）",
   /def toggle_flip[\s\S]{0,600}self\._apply_pure_zoom\(keep_center="cur"\)/.test(pet));
-ok("菜单项「翻转参考图（H）」在纯净模式右键里",
-  pet.includes('FLIP_MENU_TEXT = "翻转参考图（H）"') &&
+ok("菜单项「水平翻转参考图」在纯净模式右键里",
+  pet.includes('FLIP_MENU_TEXT = "水平翻转参考图"') &&
   /MF_STRING \| \(MF_CHECKED if self\.flip_h else 0\),\s*\n\s*24, FLIP_MENU_TEXT/.test(pet));
 ok("已在翻转时菜单打勾", /MF_CHECKED if self\.flip_h else 0/.test(pet));
 ok("菜单命令 24 接到 toggle_flip",
   /elif cmd == 24:/.test(pet) && /self\.toggle_flip\(\)\s*#/.test(pet));
-ok("快捷键默认是 H", pet.includes("VK_H = 0x48") && /HOTKEY_FLIP_ID/.test(pet));
-ok("注册/注销走 RegisterHotKey（签名已声明）",
-  /user32\.RegisterHotKey\.argtypes = \[HANDLE, ctypes\.c_int, ctypes\.c_uint, ctypes\.c_uint\]/.test(pet) &&
-  /user32\.UnregisterHotKey\.argtypes = \[HANDLE, ctypes\.c_int\]/.test(pet));
-ok("只在纯净模式期间占用 H（进模式注册、退模式注销）",
-  /def show_image[\s\S]*?self\._register_flip_hotkey\(\)/.test(pet) &&
-  /def exit_pure[\s\S]{0,700}self\._unregister_flip_hotkey\(\)/.test(pet) &&
-  /self\.flip_h = False/.test(pet));
-ok("收掉大图窗口前先还快捷键",
-  /def destroy_pure_window\(\)[\s\S]{0,400}pw\._unregister_flip_hotkey\(\)/.test(pet));
-ok("窗口销毁时也还快捷键", /if msg == WM_DESTROY:[\s\S]{0,200}self\._unregister_flip_hotkey\(\)/.test(pet));
-ok("WM_HOTKEY 只在纯净窗口里响应 H",
-  /if msg == WM_HOTKEY and wparam == HOTKEY_FLIP_ID:[\s\S]{0,120}if self\.kind == "pure":\s*\n\s*self\.toggle_flip\(\)/.test(pet));
-ok("用 MOD_NOREPEAT 防按住连翻", pet.includes("MOD_NOREPEAT = 0x4000") &&
-  /RegisterHotKey\(self\.hwnd, HOTKEY_FLIP_ID, MOD_NOREPEAT, VK_H\)/.test(pet));
-ok("注册失败会记日志（不影响右键菜单翻转）",
-  /翻转快捷键 H 注册失败/.test(pet));
+// ⚠️ 2026-09-29：全局热键 H 会让主人速写时打字打不出 H，整条链路删干净，只留右键菜单。
+ok("没有全局热键：热键常量 / 注册调用 / WM_HOTKEY 分支全没了",
+  !/WM_HOTKEY\s*=/.test(pet) && !/VK_H\s*=/.test(pet) &&
+  !/HOTKEY_FLIP_ID/.test(pet) && !/MOD_NOREPEAT\s*=/.test(pet) &&
+  !/user32\.RegisterHotKey/.test(pet) && !/msg == WM_HOTKEY/.test(pet));
+ok("没有 _register_flip_hotkey / _unregister_flip_hotkey / _hk_registered 残留",
+  !/_register_flip_hotkey|_unregister_flip_hotkey|_hk_registered/.test(pet));
+ok("菜单文案里不再带（H）提示", !/（H）/.test(pet));
+ok("退出纯净模式时会把翻转状态复位",
+  /def exit_pure[\s\S]{0,700}self\.flip_h = False/.test(pet));
+
+console.log("\n【桌面大图：以鼠标为中心缩放，绝不横向拉伸】");
+ok("滚轮缩放以鼠标为中心（pure_zoom_step 收下鼠标坐标）",
+  /def pure_zoom_step\(self, sign, mx=None, my=None\)/.test(pet) &&
+  /self\.pure_zoom_step\(1 if delta > 0 else -1, mx, my\)/.test(pet));
+ok("_apply_pure_zoom 支持 anchor 锚点（并把左上角换算回中心）",
+  /def _apply_pure_zoom\(self, keep_center="cur", anchor=None\)/.test(pet) &&
+  /if anchor and self\._w and self\._h:/.test(pet) &&
+  /cx = int\(round\(mx - rx \* w \+ w \/ 2\.0\)\)/.test(pet));
+ok("鼠标坐标从 WM_MOUSEWHEEL 的 lparam 取（c_short：副屏负坐标也对）",
+  /mx = ctypes\.c_short\(lparam & 0xFFFF\)\.value/.test(pet) &&
+  /my = ctypes\.c_short\(\(lparam >> 16\) & 0xFFFF\)\.value/.test(pet));
+ok("顶到边缘只等比收住，绝不横向拉伸（_fit_pure_size 宽高同比例）",
+  /r = min\(r, max_w \/ float\(w\)\)/.test(pet) &&
+  /r = min\(r, max_h \/ float\(h\)\)/.test(pet) &&
+  /w = max\(1, int\(round\(w \* r\)\)\)/.test(pet) &&
+  /h = max\(1, int\(round\(h \* r\)\)\)/.test(pet));
+ok("在小兔身上滚：鼠标不在图上 → 按大图中心缩放（不传锚点）",
+  /PURE_WIN\.pure_zoom_step\(1 if delta > 0 else -1\)/.test(pet));
 ok("桌面端含 POST /pet_pure 原子入口", pet.includes('"/pet_pure"'));
 // ⚠️ HTTP 请求线程上建窗口：ThreadingHTTPServer 每请求一个线程，
 //    请求结束线程退出 → 它建的窗口立刻被销毁（参考图大窗一闪就没）。
@@ -1212,6 +1231,125 @@ ok("桌宠本体仍不占任务栏按钮（保留 WS_EX_TOOLWINDOW）",
 ok("菜单派发抽成 menu_cmd / run_menu（桌宠右键与托盘共用）",
   pet.includes("def menu_cmd") && pet.includes("def run_menu") &&
   /def show_menu\(self\):\s*\n\s*self\.run_menu\(self\._menu\(\)\)/.test(pet));
+
+console.log("\n【网页里缩放参考图：以鼠标为中心 / 不撑坏 UI / 全屏 500%】");
+ok("网页端绑上了滚轮缩放（练习页 + 开始前的大图 + 全屏层）",
+  /bindWebZoom\("prompt-box"\)/.test(html) && /bindWebZoom\("welcome-img"\)/.test(html) &&
+  /bindWebZoom\("img-fs"\)/.test(html));
+ok("滚轮监听用 passive:false（否则 preventDefault 无效、页面跟着一起滚）",
+  /addEventListener\("wheel"[\s\S]{0,300}\{\s*passive:\s*false\s*\}/.test(html));
+ok("缩放时阻止页面滚动",
+  /addEventListener\("wheel"[\s\S]{0,200}e\.preventDefault\(\)/.test(html));
+ok("普通画面 50%~200%，全屏看图最大 500%",
+  /WEB_ZOOM_MIN = 0\.5, WEB_ZOOM_MAX = 2\.0/.test(html) &&
+  /FS_ZOOM_MIN = 0\.5, FS_ZOOM_MAX = 5\.0/.test(html));
+// 🔴 缩放走 transform：只改视觉不动布局 —— 框永远那么大，图超出就被裁，
+//    不会把下面的计时环/按钮挤下去（以前改图片宽度会把框撑大 → 遮挡 UI）
+ok("缩放走 transform（不再改图片宽度撑大框）",
+  /transform = "translate\("/.test(html) && /scale\("/.test(html) &&
+  !/el\.style\.width = Math\.round/.test(html));
+ok("transform-origin 固定在左上角（位移换算最简单）",
+  /el\.style\.transformOrigin = "0 0"/.test(html));
+ok("框保持原尺寸、超出部分裁掉（不遮挡本页 UI）",
+  /\.prompt-box \{[\s\S]{0,400}position: relative; overflow: hidden/.test(html));
+ok("以鼠标为中心放大（滚轮事件把鼠标坐标传进去）",
+  /zAt\(el, zState\(el\)\.z \+ \(e\.deltaY < 0 \? WEB_ZOOM_STEP : -WEB_ZOOM_STEP\), e\.clientX, e\.clientY\)/.test(html));
+ok("放大超出后可以按住拖动看（不会把图拖离框）",
+  /addEventListener\("mousedown"/.test(html) && /zClamp\(m, m\.z,/.test(html));
+ok("双击图复位到 100%",
+  /addEventListener\("dblclick"[\s\S]{0,240}webZoomReset\(el\)/.test(html));
+ok("换图时缩放复位到 100%", /webZoomReset\(\$\("welcome-img-el"\)\)/.test(html));
+ok("有全屏看图按钮 + 全屏层（Esc / ✕ / 点空白处退出）",
+  /id="fs-btn"/.test(html) && /id="img-fs"/.test(html) &&
+  /id="img-fs-close"/.test(html) && /e\.key === "Escape"/.test(html));
+// 按钮要一直看得见：主色实心圆 + 白图标，尺寸 45px（原 30px 的 150%）
+ok("全屏按钮默认就清楚显示（没有 opacity:0 / 悬停才出现）",
+  /#fs-btn \{[\s\S]{0,420}?\}/.test(html) &&
+  !/#fs-btn \{[\s\S]{0,420}?opacity: 0/.test(html) &&
+  !/\.prompt-box:hover #fs-btn/.test(html));
+ok("全屏按钮用主色填充 + 白图标",
+  /#fs-btn \{[\s\S]{0,420}?background: var\(--pink\); color: #fff/.test(html));
+ok("全屏按钮比原来放大 150%（45px，字号 22px）",
+  /#fs-btn \{[\s\S]{0,420}?width: 45px; height: 45px/.test(html) &&
+  /#fs-btn \{[\s\S]{0,420}?font-size: 22px/.test(html));
+ok("全屏按钮挂到有图的那个框上（换图重画后会重新挂）",
+  /function mountFsBtn/.test(html) && /mountFsBtn\(\$\("prompt-box"\)\)/.test(html) &&
+  /mountFsBtn\(\$\("welcome-img"\)\)/.test(html));
+(function () {
+  const box = $("#prompt-box");
+  box.innerHTML = '<img src="x.png" alt="参考图">';
+  const img = box.querySelector("img");
+  Object.defineProperty(img, "naturalWidth", { value: 1000, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: 500, configurable: true });
+  const wheel = (dy, x, y) => {
+    let ev;
+    try {
+      ev = new w.WheelEvent("wheel", { deltaY: dy, clientX: x || 0, clientY: y || 0,
+                                       bubbles: true, cancelable: true });
+    } catch (e) {
+      ev = new w.Event("wheel", { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, "deltaY", { value: dy });
+    }
+    box.dispatchEvent(ev);
+  };
+  wheel(-100, 100, 100);
+  ok("往上滚 → 115%（transform 里带着 scale(1.15)）",
+    img.dataset.zoom === "1.15" && /scale\(1\.15\)/.test(img.style.transform),
+    img.dataset.zoom + " / " + img.style.transform);
+  wheel(100, 100, 100);
+  ok("往下滚 → 缩回 100%（transform 清空）",
+    img.dataset.zoom === "1" && img.style.transform === "",
+    img.dataset.zoom + " / " + img.style.transform);
+  for (let i = 0; i < 12; i++) wheel(-100, 100, 100);
+  ok("普通画面最多 200%", img.dataset.zoom === "2", img.dataset.zoom);
+  for (let i = 0; i < 24; i++) wheel(100, 100, 100);
+  ok("最小 50%", img.dataset.zoom === "0.5", img.dataset.zoom);
+  box.dispatchEvent(new w.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  ok("双击图回到 100%", img.dataset.zoom === "1" && img.style.transform === "", img.dataset.zoom);
+
+  // 全屏看图：点右上角 ⛶ → 打开 → 滚轮最多到 500%
+  mountFsBtnTest(box);
+})();
+function mountFsBtnTest(box) {
+  // 上面刚重画过 innerHTML，按钮会一起被冲掉 —— 正式代码里 renderPrompt 会重新挂
+  w.mountFsBtn(box);
+  const btn = $("#fs-btn");
+  ok("换图重画后全屏按钮会重新挂回图上", btn && btn.parentElement === box,
+    btn ? String(btn.parentElement.id) : "null");
+  btn.dispatchEvent(new w.MouseEvent("click", { bubbles: true, cancelable: true }));
+  const fs = $("#img-fs");
+  ok("点 ⛶ 打开全屏看图", fs.hidden === false, String(fs.hidden));
+  const fsImg = $("#img-fs-el");
+  Object.defineProperty(fsImg, "naturalWidth", { value: 1000, configurable: true });
+  Object.defineProperty(fsImg, "naturalHeight", { value: 500, configurable: true });
+  const fsw = dy => {
+    let ev;
+    try {
+      ev = new w.WheelEvent("wheel", { deltaY: dy, clientX: 200, clientY: 200,
+                                       bubbles: true, cancelable: true });
+    } catch (e) {
+      ev = new w.Event("wheel", { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, "deltaY", { value: dy });
+    }
+    fs.dispatchEvent(ev);
+  };
+  for (let i = 0; i < 40; i++) fsw(-100);
+  ok("全屏里最多放大到 500%", fsImg.dataset.zoom === "5", fsImg.dataset.zoom);
+  for (let i = 0; i < 60; i++) fsw(100);
+  ok("全屏里最小 50%", fsImg.dataset.zoom === "0.5", fsImg.dataset.zoom);
+  $("#img-fs-close").dispatchEvent(new w.MouseEvent("click", { bubbles: true, cancelable: true }));
+  ok("点 ✕ 退出全屏", fs.hidden === true, String(fs.hidden));
+}
+
+console.log("\n【版本号：一处改动，网页 + exe 一起跟上】");
+ok("桌面端不再写死版本号，改成读 index.html 的 APP_VER",
+  /def app_version\(\)/.test(pet) && /APP_VER\\s\*=\\s\*"/.test(pet) &&
+  !/"V1\.0\.0 · 一起练速写吧"/.test(pet) && !/"V1\.0\.0 ·/.test(pet));
+ok("读不到时还有兜底版本（不会变成空白）", /APP_VER_FALLBACK = "V1.1"/.test(pet));
+ok("分享卡片上的版本号是拼出来的（跟着 APP_VER 走）",
+  /"%s · 一起练速写吧" % app_version\(\)/.test(pet));
+ok("启动日志会打印版本号（方便核对 exe 是哪一版）",
+  /log\("%s %s 启动" % \(APP_NAME, app_version\(\)\)\)/.test(pet));
 
 console.log("\n【更新记录 CHANGELOG.md】");
 const clPath = path.join(ROOT, "CHANGELOG.md");

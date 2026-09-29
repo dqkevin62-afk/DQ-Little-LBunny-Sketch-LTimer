@@ -16,9 +16,10 @@ browser/
 # 截图自查用过的 Chrome 配置目录（几百个缓存文件，不要进仓库）
 .chrome_shot/
 
-# 截图自查留下的临时文件
+# 截图自查留下的临时文件（_ 开头的临时 html / 预览图都不进仓库）
+_*.png
+_*.html
 desktop/_*.png
-_up_zoom.png
 _tmp_*.html
 _shot_*.html
 

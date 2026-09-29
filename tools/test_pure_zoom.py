@@ -42,6 +42,8 @@ def make_pure(base=(400, 300), wa=(0, 0, 1920, 1080)):
     pw._pure_base = base
     pw._pure_img = FakeImg(base[0], base[1])
     pw._pil = FakeImg(base[0], base[1])
+    pw.flip_h = False                          # _flip_source() 要用到（翻转相关状态）
+    pw._pure_img_flip = None
     pw.base_y = 0
     area = R(*wa)
     pw._work_area = lambda: area
@@ -90,6 +92,29 @@ pw.pure_zoom_step(1)
 ok("放大后仍完整在屏内",
    pw.x >= m and pw.y >= m and pw.x + pw._w <= 1920 - m and pw.y + pw._h <= 1080 - m,
    "x=%s y=%s w=%s h=%s" % (pw.x, pw.y, pw._w, pw._h))
+
+print("\n【以鼠标为中心放大：鼠标底下那一点不动】")
+pw = make_pure(base=(400, 300))
+pw.x, pw.y, pw._w, pw._h = 100, 100, 400, 300
+mx, my = 200, 250                              # 鼠标正好指在图的 25% 宽 / 50% 高 处
+pw.pure_zoom_step(1, mx, my)                   # 给了鼠标坐标 = 以鼠标为中心
+ok("放大一格后倍率是 1.15", abs(pw.zoom - 1.15) < 1e-6, pw.zoom)
+rx = (mx - pw.x) / float(pw._w)
+ry = (my - pw.y) / float(pw._h)
+ok("鼠标指的仍是图上同一个点（横向 25%）", abs(rx - 0.25) < 0.01, rx)
+ok("鼠标指的仍是图上同一个点（纵向 50%）", abs(ry - 0.5) < 0.01, ry)
+ok("等比放大，没被横向拉宽/拉变形",
+   abs((pw._w / float(pw._h)) - (400 / 300.0)) < 0.01, "%sx%s" % (pw._w, pw._h))
+
+print("\n【不给鼠标坐标时（在小兔身上滚）：按大图自己的中心缩放】")
+pw2 = make_pure(base=(400, 300))
+pw2.hwnd = 12345                               # 假装窗口已建（否则会当首次弹图、居中到屏幕）
+pw2.x, pw2.y, pw2._w, pw2._h = 300, 200, 400, 300
+c0 = (pw2.x + pw2._w // 2, pw2.y + pw2._h // 2)
+pw2.pure_zoom_step(1)
+c1 = (pw2.x + pw2._w // 2, pw2.y + pw2._h // 2)
+ok("中心基本不动（1~2px 的整数误差可以接受）",
+   abs(c1[0] - c0[0]) <= 2 and abs(c1[1] - c0[1]) <= 2, (c0, c1))
 
 print("\n【多屏：参考图可以搬到任意一块显示器（仍置顶）】")
 monitors = [R(0, 0, 1920, 1080), R(1920, 0, 3840, 1080), R(-1920, 0, 0, 1080)]

@@ -19,6 +19,7 @@ import os
 import queue
 import random
 import shutil
+import re
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,7 @@ import urllib.request
 from urllib.parse import quote, urlparse, parse_qs
 
 APP_NAME = "DQ小兔速写计时姬"      # 显示用（exe 名 / 桌宠窗口标题）
+APP_VER_FALLBACK = "V1.1"         # 只有读不到 index.html 时才用它（真正来源是 APP_VER）
 # 数据目录沿用最初的名字，改名也不会导致网页资源和浏览器档案重新生成一遍
 DATA_NAME = "DQ速写计时姬"
 PET_CLASS = "DQXiaotuPetWnd"
@@ -128,13 +130,10 @@ HWND_BROADCAST = 0xFFFF          # PostMessage 的目标：广播给所有顶层
 WM_ALREADY_MSG = "DQXiaotuPet_AlreadyRunning"
 ALREADY_TEXT = "小兔已经在运行了哦"
 
-# 纯净模式翻转快捷键：只在纯净参考图模式生效（进模式注册、退模式注销），
-# 免得平时把 H 键从别的程序手里抢走。
-WM_HOTKEY = 0x0312
-VK_H = 0x48
-MOD_NOREPEAT = 0x4000
-HOTKEY_FLIP_ID = 0x51A1          # 随便一个只在本程序里用得到的 id
-FLIP_MENU_TEXT = "翻转参考图（H）"
+# ⚠️ 翻转参考图**只走右键菜单**，不注册任何全局快捷键。
+#    以前把 H 注册成全局热键（RegisterHotKey），结果主人速写时打字打不出 H
+#    —— 2026-09-29 整条热键链路删干净，别再回加。
+FLIP_MENU_TEXT = "水平翻转参考图"
 
 MF_STRING = 0x0000
 MF_POPUP = 0x0010
@@ -283,10 +282,6 @@ user32.PostMessageW.restype = ctypes.c_bool
 user32.RegisterWindowMessageW.argtypes = [ctypes.c_wchar_p]
 user32.RegisterWindowMessageW.restype = ctypes.c_uint
 WM_ALREADY = user32.RegisterWindowMessageW(WM_ALREADY_MSG)
-user32.RegisterHotKey.argtypes = [HANDLE, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
-user32.RegisterHotKey.restype = ctypes.c_bool
-user32.UnregisterHotKey.argtypes = [HANDLE, ctypes.c_int]
-user32.UnregisterHotKey.restype = ctypes.c_bool
 user32.PostQuitMessage.argtypes = [ctypes.c_int]
 user32.TranslateMessage.argtypes = [ctypes.c_void_p]
 user32.TranslateMessage.restype = ctypes.c_bool
@@ -437,6 +432,22 @@ def materialize_web():
 
 def page_path():
     return os.path.join(materialize_web(), "index.html")
+
+
+def app_version():
+    """版本号**只认 index.html 里的 APP_VER**（网页侧栏与 exe 分享卡片都跟着它走）。
+
+    ⚠️ 别在桌面端另外写死版本号：以前 V1.0.0 写死在这儿，改版本时漏一处，
+       打包出来的 exe 就还印着旧版本号（2026-09-29 改成都从网页读）。
+    """
+    try:
+        with open(page_path(), encoding="utf-8") as f:
+            m = re.search(r'APP_VER\s*=\s*"([^"]+)"', f.read())
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return APP_VER_FALLBACK
 
 
 # ---------------------------------------------------------------- 打开页面
@@ -653,10 +664,6 @@ def destroy_pure_window():
         return
     try:
         pw.hide()
-    except Exception:
-        pass
-    try:
-        pw._unregister_flip_hotkey()     # 先还快捷键，再销毁窗口
     except Exception:
         pass
     try:
@@ -1349,9 +1356,8 @@ class PetWindow:
         self.zoom = 1.0                # 缩放倍率 0.5 ~ 2.0
         self._pure_img = None          # 原图（RGBA，全分辨率，供缩放重采样）
         self._pure_base = None         # 基准显示尺寸 (w, h)，zoom=1.0 时的大小
-        self.flip_h = False            # 左右镜像显示参考图（右键菜单 / H 键切换）
+        self.flip_h = False            # 左右镜像显示参考图（只有右键菜单能切）
         self._pure_img_flip = None     # 镜像后的缓存（省得每次缩放都重转一遍）
-        self._hk_registered = False    # 翻转快捷键是否已经注册
         self._font = self._load_font()
 
     # -- 载入透明 PNG（按高度缓存，免重复读盘）-----------------------
@@ -1585,8 +1591,8 @@ class PetWindow:
             p = pet.resize((pw, ph), Image.LANCZOS)
             card.paste(p, ((W - pw) // 2, 250), p)
             d.text((W // 2, 1130), cap, font=self._font_at(40), fill=(59, 51, 80), anchor="mm")
-            d.text((W // 2, 1225), "V1.0.0 · 一起练速写吧", font=self._font_at(26),
-                   fill=(140, 130, 163), anchor="mm")
+            d.text((W // 2, 1225), "%s · 一起练速写吧" % app_version(),
+                   font=self._font_at(26), fill=(140, 130, 163), anchor="mm")
             path = os.path.join(out_dir, "social_card.png")
             card.save(path)
             return path
@@ -1809,9 +1815,14 @@ class PetWindow:
                     min(cy - self._h // 2, wa.bottom - margin - self._h))
         return x, y
 
-    def _apply_pure_zoom(self, keep_center="cur"):
+    def _apply_pure_zoom(self, keep_center="cur", anchor=None):
         """按 self.zoom 重采样大图；keep_center='cur' 时保持窗口中心不动。
 
+        anchor=(mx,my) 时改成**以鼠标为中心**缩放：鼠标指着图上的哪一点，
+        缩放后那一点还在鼠标底下（2026-09-29 改，以前一律按窗口中心，放大后就飘了）。
+
+        ⚠️ 宽高始终按同一个倍率走（`_fit_pure_size` 等比夹取），顶到屏幕/工作区
+           边缘时只会停下不再变大，**绝不会把图横向拉宽、拉变形**。
         多屏：一律按「窗口当前所在那块屏」夹取，不会把图拽回主屏。
         """
         from PIL import Image
@@ -1824,7 +1835,15 @@ class PetWindow:
         src = self._flip_source()
         self._pil = src.resize((w, h), Image.LANCZOS)
         self._pet_h = h
-        if keep_center == "cur" and self.hwnd:
+        if anchor and self._w and self._h:
+            # 以鼠标为中心：记下鼠标在窗口里的相对位置 (rx,ry)，缩放后让同一点回到鼠标下
+            # ⚠️ _clamp_into_area 收的是「中心点」，所以这里要把左上角换算回中心
+            mx, my = anchor
+            rx = min(1.0, max(0.0, (mx - self.x) / float(self._w)))
+            ry = min(1.0, max(0.0, (my - self.y) / float(self._h)))
+            cx = int(round(mx - rx * w + w / 2.0))
+            cy = int(round(my - ry * h + h / 2.0))
+        elif keep_center == "cur" and self.hwnd:
             cx = self.x + (self._w or w) // 2
             cy = self.y + (self._h or h) // 2
         else:
@@ -1836,7 +1855,7 @@ class PetWindow:
         user32.SetWindowPos(self.hwnd, None, self.x, self.y, 0, 0,
                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
 
-    # -- 参考图镜像翻转（右键菜单 / 快捷键 H）------------------------------
+    # -- 参考图镜像翻转（只走右键菜单）------------------------------------
     def _flip_source(self):
         """按当前翻转状态取原图：翻转后缓存一份，缩放重采样时不用每次重转。"""
         from PIL import Image
@@ -1862,40 +1881,19 @@ class PetWindow:
         log("参考图镜像翻转：%s" % ("开" if self.flip_h else "关"))
         return self.flip_h
 
-    def _register_flip_hotkey(self):
-        """进纯净模式时把 H 注册成全局热键（只在本模式期间占用，退出即注销）。"""
-        if self._hk_registered or not self.hwnd:
-            return False
-        try:
-            if user32.RegisterHotKey(self.hwnd, HOTKEY_FLIP_ID, MOD_NOREPEAT, VK_H):
-                self._hk_registered = True
-                log("翻转快捷键 H 已注册")
-                return True
-            log("翻转快捷键 H 注册失败（可能被别的程序占着），右键菜单仍可用")
-        except Exception:
-            log("翻转快捷键 H 注册异常\n" + traceback_str())
-        return False
+    def pure_zoom_step(self, sign, mx=None, my=None):
+        """鼠标滚轮缩放：0.5x ~ 2.0x，**以鼠标为中心**（mx,my 给了就用鼠标锚点）。
 
-    def _unregister_flip_hotkey(self):
-        if not self._hk_registered:
-            return
-        try:
-            if self.hwnd:
-                user32.UnregisterHotKey(self.hwnd, HOTKEY_FLIP_ID)
-        except Exception:
-            pass
-        self._hk_registered = False
-        log("翻转快捷键 H 已释放")
-
-    def pure_zoom_step(self, sign):
-        """鼠标滚轮缩放：0.5x ~ 2.0x，以窗口中心为锚，最大也不出屏幕四边。"""
+        ⚠️ 只改等比倍率：顶到屏幕/work area 边缘就停在那儿，不会横向拉宽、不会变形。
+        """
         if self._pure_img is None or not self._pure_base:
             return
         old = self.zoom
         self.zoom = max(self.PURE_ZOOM_MIN,
                         min(self.PURE_ZOOM_MAX, self.zoom + sign * self.PURE_ZOOM_STEP))
         if abs(self.zoom - old) > 1e-6:
-            self._apply_pure_zoom(keep_center="cur")
+            self._apply_pure_zoom(keep_center="cur",
+                                  anchor=(mx, my) if mx is not None else None)
 
     def pure_to_next_monitor(self):
         """把参考图大窗搬到下一块显示器（多屏时想放哪块屏就放哪块，仍然置顶）。
@@ -1929,7 +1927,6 @@ class PetWindow:
         """退出纯净模式：关掉大图窗口，小兔恢复常态；restore_page=True 唤回主界面。"""
         if self.kind == "pure":
             self.hide()                      # 大图窗口自己隐藏即可
-            self._unregister_flip_hotkey()   # 退出纯净模式：把 H 键还给别的程序
             self._pure_img = None
             self._pure_img_flip = None
             self._pure_base = None
@@ -2001,7 +1998,6 @@ class PetWindow:
             self._apply_pure_zoom(keep_center=None)      # 首次：屏幕居中
             user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
-            self._register_flip_hotkey()                 # 纯净模式里 H = 翻转参考图
             return True
         except Exception:
             log("show_image 失败\n" + traceback_str())
@@ -2382,7 +2378,8 @@ class PetWindow:
         hmenu = user32.CreatePopupMenu()
         if self.kind == "pure":
             # 大图窗口只给这几项：另存为 / 翻转 / 唤回主界面 / 退出速写
-            # （纯净画面不放任何按钮，操作都走右键菜单 + 快捷键）
+            # （纯净画面不放任何按钮，操作都走右键菜单；⚠️ 没有任何快捷键，
+            #  免得抢走打字时的按键）
             user32.AppendMenuW(hmenu, MF_STRING, 20, "图片另存为…")
             user32.AppendMenuW(hmenu, MF_STRING | (MF_CHECKED if self.flip_h else 0),
                                24, FLIP_MENU_TEXT)
@@ -2447,7 +2444,7 @@ class PetWindow:
         elif cmd == 23:
             self.pure_to_next_monitor()  # 多屏：把参考图搬到下一块屏（仍置顶）
         elif cmd == 24:
-            self.toggle_flip()           # 左右镜像参考图（快捷键 H 同效）
+            self.toggle_flip()           # 左右镜像参考图（只有右键菜单这一个入口）
         elif cmd == 2:
             self.set_topmost(not self.topmost)
         elif cmd == 3:
@@ -2567,11 +2564,6 @@ class PetWindow:
                 # 又有人双击了一次 exe（第二个实例广播过来的）：跳一下 + 说一句
                 self.notify_running()
                 return 0
-            if msg == WM_HOTKEY and wparam == HOTKEY_FLIP_ID:
-                # 纯净模式里的 H 键：左右镜像参考图
-                if self.kind == "pure":
-                    self.toggle_flip()
-                return 0
             if msg == WM_TRAY:
                 # 托盘图标：左键/双击开页面，右键弹菜单
                 if lparam in (WM_LBUTTONUP, WM_LBUTTONDBLCLK, NIN_SELECT):
@@ -2620,10 +2612,15 @@ class PetWindow:
             if msg == WM_MOUSEWHEEL:
                 if self.pure or self._pure_img is not None:
                     delta = ctypes.c_short((wparam >> 16) & 0xFFFF).value
+                    # WM_MOUSEWHEEL 的 lparam 就是鼠标的屏幕坐标（c_short：副屏负坐标也正确）
+                    mx = ctypes.c_short(lparam & 0xFFFF).value
+                    my = ctypes.c_short((lparam >> 16) & 0xFFFF).value
                     if self.kind == "pure":
-                        self.pure_zoom_step(1 if delta > 0 else -1)
+                        # 以鼠标为中心缩放：鼠标指着哪儿就放大哪儿
+                        self.pure_zoom_step(1 if delta > 0 else -1, mx, my)
                     elif PURE_WIN is not None:
-                        PURE_WIN.pure_zoom_step(1 if delta > 0 else -1)  # 滚小兔也缩放那张大图
+                        # 在小兔身上滚：鼠标不在图上，按大图自己的中心缩放
+                        PURE_WIN.pure_zoom_step(1 if delta > 0 else -1)
                 return 0
             if msg == WM_RBUTTONUP:
                 if not self.dragging:
@@ -2662,7 +2659,6 @@ class PetWindow:
                 return 0
             if msg == WM_DESTROY:
                 user32.KillTimer(hwnd, self.timer_id)
-                self._unregister_flip_hotkey()   # 窗口没了就把快捷键还回去
                 self.remove_tray_icon()      # 退出时把托盘图标收掉，别留残影
                 user32.PostQuitMessage(0)
                 return 0
@@ -2737,6 +2733,7 @@ def main():
             pass
 
     no_page = "--no-page" in sys.argv
+    log("%s %s 启动" % (APP_NAME, app_version()))   # 版本号直接写进日志，方便核对 exe 是哪一版
 
     if not single_instance():
         # 已经有小兔在跑了：不再重复启动，只让它跳一下并提示一句

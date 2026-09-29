@@ -311,11 +311,14 @@
     min-height: 160px; border-radius: 18px;
     background: linear-gradient(150deg, var(--pink-soft) 0%, var(--purple-soft) 100%);
     display: flex; align-items: center; justify-content: center;
-    padding: 24px; margin-bottom: 20px; overflow: hidden;
+    padding: 24px; margin-bottom: 20px;
+    /* ⚠️ 缩放走 transform：框的尺寸永远是「100% 时」那个尺寸，放大后图直接超出框
+       被裁掉，不会把下面的计时环、按钮挤走（改图片宽度就会撑大框 → 遮挡 UI）。 */
+    position: relative; overflow: hidden;
   }
   .prompt-box .cat { font-size: 13px; color: var(--purple); display: block; margin-bottom: 8px; }
   .prompt-box .txt { font-size: 20px; line-height: 1.7; font-weight: 500; }
-  .prompt-box img { max-width: 100%; max-height: 55vh; border-radius: 10px; }
+  .prompt-box img { max-width: 100%; max-height: 55vh; border-radius: 10px; margin: auto; }
   /* 进度条：参考图里的胶囊小标签质感 */
   .progress-line {
     display: block; width: fit-content; margin: 0 auto 16px;
@@ -475,8 +478,40 @@
   #sidebar .bars { height: 66px; margin-top: 9px; }
   #sidebar footer { margin-top: 2px; }
   @media (max-width: 860px) { #screen-guide { padding: 20px 16px 24px; } }
-  #welcome-img { text-align: center; margin-bottom: 20px; }
+  #welcome-img { text-align: center; margin-bottom: 20px; position: relative; overflow: hidden; }
   #welcome-img img { max-width: 100%; max-height: 42vh; border-radius: 12px; border: 1px solid var(--line); }
+  /* 图上右上角那个「全屏看图」按钮：**一直清楚显示**（不用悬停才出现），
+     主色实心圆 + 白图标（和 .btn / .chip.on 一个写法），比原来放大 150%（30 → 45px）。 */
+  #fs-btn {
+    position: absolute; top: 10px; right: 10px; z-index: 6;
+    width: 45px; height: 45px; border-radius: 50%;
+    border: none; background: var(--pink); color: #fff;
+    font-size: 22px; line-height: 1; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(104, 76, 158, .28);
+    transition: opacity .15s;
+  }
+  #fs-btn:hover { opacity: .88; }
+  /* 全屏看图 */
+  #img-fs {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #img-fs[hidden] { display: none; }
+  #img-fs img {
+    max-width: 100%; max-height: 100%; border-radius: 8px;
+    cursor: grab; user-select: none; -webkit-user-drag: none;
+  }
+  #img-fs-close {
+    position: absolute; top: 18px; right: 18px; z-index: 3;
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font-size: 17px; line-height: 1; cursor: pointer;
+  }
+  #img-fs .fs-tip {
+    position: absolute; left: 0; right: 0; bottom: 18px;
+    text-align: center; color: var(--muted); font-size: 13px;
+  }
   .welcome { text-align: center; color: var(--muted); }
   .welcome .big { font-size: 22px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
   .welcome p { font-size: 14px; line-height: 1.9; }
@@ -520,7 +555,7 @@
   <aside id="sidebar">
     <div class="sb-head">
       <img class="avatar" src="assets/dq-chibi.png" alt="小兔 Q版形象">
-      <h1>DQ小兔速写计时姬<span class="ver">V1.0.0</span></h1>
+      <h1>DQ小兔速写计时姬<span class="ver" id="app-ver">V1.1</span></h1>
       <button id="btn-settings" class="chip">收起</button>
     </div>
     <p class="sub">二次元美少女专项 · 每天坚持速写 1~2 小时即可</p>
@@ -623,7 +658,7 @@
   <main id="main">
     <!-- 欢迎页 -->
     <section id="screen-welcome" class="stage">
-      <div id="welcome-img" hidden><img id="welcome-img-el" src="" alt="参考图"></div>
+      <div id="welcome-img" hidden><img id="welcome-img-el" src="" alt="参考图" draggable="false"></div>
       <img class="hime-img" src="assets/dq-timer-hime.jpg" alt="小兔 角色形象">
       <p class="hime-name">DQ小兔速写计时姬</p>
       <div class="welcome">
@@ -789,6 +824,14 @@
       <button class="btn ghost" id="btn-back" style="margin-top:10px">返回</button>
     </section>
   </main>
+</div>
+<!-- 全屏看图：点参考图右上角的 ⛶ 打开，滚轮最大放大到 500% 看细节；
+     拖动平移、双击复位、Esc 或 ✕ 退出。图只做等比缩放，绝不会被拉伸。 -->
+<button type="button" id="fs-btn" title="全屏看图">⛶</button>
+<div id="img-fs" hidden>
+  <img id="img-fs-el" src="" alt="参考图" draggable="false">
+  <button type="button" id="img-fs-close" title="退出全屏">✕</button>
+  <div class="fs-tip">滚轮缩放（最大 500%）· 按住拖动平移 · 双击复位 · Esc 退出</div>
 </div>
 <!-- 题库分类教程内容：管理员可直接编辑 assets/guides.js 替换文案、插图、GIF 演示 -->
 <script src="assets/guides.js"></script>
@@ -1129,6 +1172,10 @@ const S = {
 };
 const $ = id => document.getElementById(id);
 const CIRC = 722.6;
+// ⚠️ 版本号**只写这一处**：侧栏那行、桌面 exe 生成的分享卡片、更新记录都跟着它走
+//    （桌面端 app_version() 会直接来 index.html 里读 APP_VER，别在别处再写死版本）。
+const APP_VER = "V1.1";
+$("app-ver").textContent = APP_VER;
 // ---------- 设置交互 ----------
 // dataKey = 按钮上的 data-* 属性名；isNum = 是否转成数字
 function bindChips(rowId, key, dataKey, isNum) {
@@ -1360,6 +1407,8 @@ function showRefThumb(i) {
   refIdx = i;
   petPurePreload(src);          // 换预览也顺手预推，点开始时这张图已经在桌宠那边了
   $("welcome-img-el").src = src;
+  webZoomReset($("welcome-img-el"));   // 换图：缩放回到 100%（不然上一张的倍数会带到新图上）
+  mountFsBtn($("welcome-img"));
   setWelcomeHero(true);
   updateUploadPreview();                    // 大方框里的预览跟着换
   $("thumb-grid").querySelectorAll("img").forEach(el => el.classList.remove("on"));
@@ -2133,11 +2182,146 @@ function renderPrompt() {
   if (!item) { $("prog-line").textContent = "还没有参考图，请先上传"; return; }
   $("prog-line").textContent = progLine();
   if (item.img) {
-    $("prompt-box").innerHTML = `<img src="${item.img}" alt="参考图">`;
+    $("prompt-box").innerHTML = `<img src="${item.img}" alt="参考图" draggable="false">`;
+    mountFsBtn($("prompt-box"));   // 右上角「全屏看图」按钮（innerHTML 重画后要挂回去）
   } else {
     $("prompt-box").innerHTML = `<div><span class="txt">还没有参考图，请先上传</span></div>`;
   }
   pureSyncImage();   // 桌面端大图跟着换到当前这张（休息时则提前预推下一张）
+}
+// -- 网页里缩放参考图：以鼠标为中心 / 图超出框但不撑坏 UI ------------------
+// ⚠️ 之前有两个毛病（2026-09-29 晚一起改掉）：
+//    ① 网页里那张图根本不响应滚轮（只有桌宠大窗能缩）；
+//    ② 改用「改图片宽度」缩放时，图会把框撑大、把下面的计时环/按钮挤下去。
+// 现在改成 transform: 缩放只改视觉，不动布局 —— 框多大还是多大，
+// 放大后**直接超出框**（被裁），UI 一动不动；超出部分按住拖动就能看。
+const WEB_ZOOM_MIN = 0.5, WEB_ZOOM_MAX = 2.0, WEB_ZOOM_STEP = 0.15;
+const FS_ZOOM_MIN = 0.5, FS_ZOOM_MAX = 5.0;          // 全屏看图：最大 500% 看细节
+function zoomBoxOf(el) { return (el && el.id === "img-fs-el") ? $("img-fs") : (el && el.parentElement); }
+function zMinMax(el) {
+  return (el && el.id === "img-fs-el") ? [FS_ZOOM_MIN, FS_ZOOM_MAX] : [WEB_ZOOM_MIN, WEB_ZOOM_MAX];
+}
+function zState(el) {
+  return {
+    z: parseFloat(el.dataset.zoom || "1") || 1,
+    tx: parseFloat(el.dataset.tx || "0") || 0,
+    ty: parseFloat(el.dataset.ty || "0") || 0
+  };
+}
+// 量出：内容区大小、图「未缩放」时在内容区里的位置、以及图本身的排版尺寸
+function zMetrics(el) {
+  const box = zoomBoxOf(el); if (!box) return null;
+  const er = el.getBoundingClientRect(), br = box.getBoundingClientRect();
+  const s = zState(el);
+  const cs = getComputedStyle(box);
+  const pl = parseFloat(cs.paddingLeft) || 0, pt = parseFloat(cs.paddingTop) || 0;
+  const pr = parseFloat(cs.paddingRight) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+  const cw = (box.clientWidth || 0) - pl - pr, ch = (box.clientHeight || 0) - pt - pb;
+  let w = el.offsetWidth, h = el.offsetHeight;
+  if (!(w > 0) || !(h > 0)) { w = el.naturalWidth; h = el.naturalHeight; }
+  if (!(w > 0) || !(h > 0)) return null;
+  return {
+    cw: cw, ch: ch, w: w, h: h, z: s.z, tx: s.tx, ty: s.ty,
+    // 图在内容区里的「原始」左上角（把当前的 translate 减掉就是没缩放时的位置）
+    ox: (er.left - br.left) - pl - s.tx, oy: (er.top - br.top) - pt - s.ty,
+    x0: br.left + pl, y0: br.top + pt      // 内容区左上角在屏幕上的位置
+  };
+}
+// 图比框小 → 居中；比框大 → 不允许把图推离框（始终盖住框）
+function zClamp(m, nz, tx, ty) {
+  const vw = m.w * nz, vh = m.h * nz;
+  tx = (vw <= m.cw) ? (m.cw - vw) / 2 - m.ox
+                    : Math.min(-m.ox, Math.max(m.cw - vw - m.ox, tx));
+  ty = (vh <= m.ch) ? (m.ch - vh) / 2 - m.oy
+                    : Math.min(-m.oy, Math.max(m.ch - vh - m.oy, ty));
+  return [tx, ty];
+}
+function zApply(el) {
+  const s = zState(el);
+  if (s.z === 1 && !s.tx && !s.ty) { el.style.transform = ""; return; }
+  el.style.transformOrigin = "0 0";       // 所有位移都按左上角算，数学最简单
+  el.style.transform = "translate(" + s.tx + "px," + s.ty + "px) scale(" + s.z + ")";
+}
+// 以鼠标为中心缩放：鼠标底下那一点，缩放前后停在同一位置
+function zAt(el, nz, mx, my) {
+  const m = zMetrics(el); if (!m) return;
+  const lim = zMinMax(el);
+  nz = Math.round(Math.min(lim[1], Math.max(lim[0], nz)) * 100) / 100;
+  if (nz === 1) { webZoomReset(el); return; }
+  const qx = (mx - m.x0 - m.ox - m.tx) / m.z;      // 鼠标指着图上的哪一点（图自身坐标）
+  const qy = (my - m.y0 - m.oy - m.ty) / m.z;
+  let tx = (mx - m.x0 - m.ox) - nz * qx;
+  let ty = (my - m.y0 - m.oy) - nz * qy;
+  const c = zClamp(m, nz, tx, ty);
+  el.dataset.zoom = String(nz);
+  el.dataset.tx = String(Math.round(c[0] * 100) / 100);
+  el.dataset.ty = String(Math.round(c[1] * 100) / 100);
+  zApply(el);
+}
+function webZoomReset(el) {
+  if (!el) return;
+  el.style.transform = "";
+  el.dataset.zoom = "1"; el.dataset.tx = "0"; el.dataset.ty = "0";
+}
+function bindWebZoom(id) {
+  const box = $(id); if (!box) return;
+  // ⚠️ 必须 passive:false，否则 preventDefault 无效、页面会跟着一起滚
+  box.addEventListener("wheel", e => {
+    const el = box.querySelector("img"); if (!el) return;
+    e.preventDefault();
+    zAt(el, zState(el).z + (e.deltaY < 0 ? WEB_ZOOM_STEP : -WEB_ZOOM_STEP), e.clientX, e.clientY);
+  }, { passive: false });
+  box.addEventListener("dblclick", e => {            // 双击图：回到 100%
+    const el = box.querySelector("img"); if (!el) return;
+    e.preventDefault(); webZoomReset(el);
+  });
+  // 放大后超出框的部分：按住拖动就能看（框本身不动，UI 不会被挤走）
+  let drag = null;
+  box.addEventListener("mousedown", e => {
+    const el = box.querySelector("img"); if (!el || e.button !== 0) return;
+    const s = zState(el);
+    drag = { el: el, mx: e.clientX, my: e.clientY, tx: s.tx, ty: s.ty };
+  });
+  box.addEventListener("mousemove", e => {
+    if (!drag) return;
+    const m = zMetrics(drag.el); if (!m) return;
+    const c = zClamp(m, m.z, drag.tx + (e.clientX - drag.mx), drag.ty + (e.clientY - drag.my));
+    drag.el.dataset.tx = String(Math.round(c[0] * 100) / 100);
+    drag.el.dataset.ty = String(Math.round(c[1] * 100) / 100);
+    zApply(drag.el);
+  });
+  const stop = () => { drag = null; };
+  box.addEventListener("mouseup", stop);
+  box.addEventListener("mouseleave", stop);
+}
+bindWebZoom("prompt-box");      // 练习页那张参考图
+bindWebZoom("welcome-img");     // 开始前的那张大图
+// -- 全屏看图：图上右上角那个 ⛶ ------------------------------------------
+// 全屏里滚轮最大能到 500%（普通画面仍是 200%），只看细节，图本身不会被拉伸。
+function openImgFs(src) {
+  if (!src) return;
+  const el = $("img-fs-el");
+  el.src = src; webZoomReset(el);
+  $("img-fs").hidden = false;
+}
+function closeImgFs() { $("img-fs").hidden = true; }
+// ⚠️ 按钮节点要自己攥在手里：练习页每次 renderPrompt 都会重画 innerHTML，
+//    挂在框里的按钮会被一起冲掉 —— 攥住引用才能重新挂回去（用 $("fs-btn") 会找不着）。
+const FS_BTN = $("fs-btn");
+FS_BTN.addEventListener("click", e => {
+  e.preventDefault(); e.stopPropagation();
+  const box = FS_BTN.parentElement;
+  const img = box && box.querySelector("img");
+  openImgFs(img ? img.currentSrc || img.src : "");
+});
+$("img-fs-close").addEventListener("click", closeImgFs);
+$("img-fs").addEventListener("click", e => { if (e.target === $("img-fs")) closeImgFs(); });
+bindWebZoom("img-fs");
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("img-fs").hidden) closeImgFs(); });
+// 全屏按钮挂到「当前有图」的那个框上（练习页换图时 innerHTML 会重画，所以要重新挂）
+function mountFsBtn(box) {
+  if (!FS_BTN || !box) return;
+  if (box.querySelector("img")) box.appendChild(FS_BTN);
 }
 function startPhase(phase, seconds) {
   S.phase = phase; S.totalPhase = seconds; S.remaining = seconds;
