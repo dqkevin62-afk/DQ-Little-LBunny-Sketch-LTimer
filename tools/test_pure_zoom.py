@@ -116,6 +116,31 @@ c1 = (pw2.x + pw2._w // 2, pw2.y + pw2._h // 2)
 ok("中心基本不动（1~2px 的整数误差可以接受）",
    abs(c1[0] - c0[0]) <= 2 and abs(c1[1] - c0[1]) <= 2, (c0, c1))
 
+print("\n【右键「返回当前参考图模式」：什么时候该出现】")
+pet = X.PetWindow.__new__(X.PetWindow)
+pet.kind = "pet"
+pet.pure = False
+pet._last_pure_src = None
+ok("一次都没进过参考图模式 → 菜单里不显示这一项", pet.has_pure_src() is False)
+pet._last_pure_src = "data:image/png;base64,AAAA"
+ok("进过参考图模式 → 能回到刚才那张图", pet.has_pure_src() is True)
+pet._last_pure_src = None
+
+
+class FakePure(object):
+    _display_src = "data:image/png;base64,BBBB"
+
+
+old_pure = X.PURE_WIN
+X.PURE_WIN = FakePure()
+ok("大图窗口里还留着那张图时，也能回去", pet.has_pure_src() is True)
+X.PURE_WIN = old_pure
+src = open(os.path.join(ROOT, "desktop", "xiaotu_pet.py"), encoding="utf-8").read()
+ok("菜单里有「返回当前参考图模式」（命令 25）",
+   '"返回当前参考图模式"' in src and "25, " in src and "cmd == 25" in src)
+ok("命令 25 接到 back_to_pure", "self.back_to_pure()" in src and "def back_to_pure" in src)
+ok("网页模式下才显示（纯净模式里不重复出现）", "if not self.pure and self.has_pure_src()" in src)
+
 print("\n【多屏：参考图可以搬到任意一块显示器（仍置顶）】")
 monitors = [R(0, 0, 1920, 1080), R(1920, 0, 3840, 1080), R(-1920, 0, 0, 1080)]
 X.list_monitor_work_areas = lambda: sorted(monitors, key=lambda a: a.left)
@@ -141,6 +166,70 @@ ok("只有一块屏时不乱跳（返回 False）", pw.pure_to_next_monitor() is
 ok("只有一块屏时位置不动", (pw.x, pw.y) == before)
 ok("搬家用的是所在屏工作区，不会拽回主屏",
    "_monitor_work_area()" in src and "MonitorFromWindow" in src)
+
+print("\n【换图（点跳过 / 自动轮播）接着上次那个位置打开】")
+src = open(os.path.join(ROOT, "desktop", "xiaotu_pet.py"), encoding="utf-8").read()
+X.PURE_LAST_POS = None
+pw = make_pure(base=(400, 300))
+pw._apply_pure_zoom(keep_center=None, pos=X.pure_last_pos())      # 第一次：从没开过
+ok("第一次弹图按屏幕居中（没有可记的位置）",
+   (pw.x, pw.y) == ((1920 - 400) // 2, (1080 - 300) // 2), (pw.x, pw.y))
+X.set_pure_last_pos(1200, 100)                                    # 主人把大图拖到这儿
+pw2 = make_pure(base=(400, 300))                                  # 下一张图（跳过 / 轮播）
+pw2._apply_pure_zoom(keep_center=None, pos=X.pure_last_pos())
+ok("换图后还开在上次那个位置", (pw2.x, pw2.y) == (1200, 100), (pw2.x, pw2.y))
+ok("换图走的是「上次位置」这条分支", "pos=pure_last_pos()" in src)
+ok("换图后把（夹过边界的）位置认下来，下次不再漂",
+   "set_pure_last_pos(self.x, self.y)" in src)
+X.set_pure_last_pos(1900, 1050)                                   # 贴着右下角外面
+pw3 = make_pure(base=(400, 300))
+pw3._apply_pure_zoom(keep_center=None, pos=X.pure_last_pos())
+ok("记下的位置贴边时会被夹回屏幕内",
+   pw3.x >= 16 and pw3.y >= 16
+   and pw3.x + pw3._w <= 1920 - 16 and pw3.y + pw3._h <= 1080 - 16,
+   (pw3.x, pw3.y))
+keep = X.pure_last_pos()
+pw4 = make_pure(base=(400, 300))
+pw4.hwnd = 12345
+pw4.x, pw4.y, pw4._w, pw4._h = 100, 100, 400, 300
+pw4.pure_zoom_step(1)
+ok("滚轮缩放不会改写记住的位置（只有换图才用）", X.pure_last_pos() == keep)
+ok("拖动结束 / 关掉大图都会把位置记下来",
+   src.count("set_pure_last_pos(r.left, r.top)") >= 2,
+   src.count("set_pure_last_pos(r.left, r.top)"))
+ok("搬去下一块屏后也记新位置", "set_pure_last_pos(self.x, self.y)     # 搬过屏之后" in src)
+
+print("\n【小兔：拖到哪儿就在哪儿，说话 / 计时都不再跳回默认角】")
+pet = X.PetWindow.__new__(X.PetWindow)
+pet.kind = "pet"
+pet.hwnd = 999                        # 假装窗口已建（真建窗要起消息循环）
+pet.scale = 1.0
+pet._pil = FakeImg(180, 180)
+pet.band = 0
+pet.x, pet.y, pet.base_y = 0, 0, 0
+pet.anchor = None
+pet._work_area = lambda: R(0, 0, 1920, 1080)
+pet._update_window_rect()
+ok("没拖过时待在默认角（右下角）",
+   (pet.x, pet.y) == (1920 - 180 - 24, 1080 - 180 - 24), (pet.x, pet.y))
+pet.anchor = (300, 380)               # 主人把它拖到左边：记「左边 + 底边」
+pet.band = 100                        # 说句话：头顶带子变高
+pet._update_window_rect()
+ok("说了话也没被拽回默认角", (pet.x, pet.y) == (300, 100), (pet.x, pet.y))
+ok("带子往上长，小兔的脚（底边）不动", pet.y + 180 + pet.band == 380, pet.y)
+pet.anchor = (5000, 5000)             # 改分辨率 / 拔掉副屏，记的位置跑到屏幕外
+pet.band = 0
+pet._update_window_rect()
+ok("记下的位置出界时会被夹回屏幕内",
+   0 <= pet.x <= 1920 - 180 and 0 <= pet.y <= 1080 - 180, (pet.x, pet.y))
+ok("_clamp_v 正常夹取", X._clamp_v(50, 10, 100) == 50)
+ok("_clamp_v 区间反了（窗口比工作区还大）取上界", X._clamp_v(50, 100, 10) == 100)
+ok("拖动结束会把位置记下来（记底边，不算呼吸动画那几像素）",
+   "self.anchor = (r.left," in src and "self.base_y + (r.bottom - r.top)" in src)
+ok("重排时以记住的位置为准，没拖过才回默认角",
+   "if self.anchor:" in src and "self.anchor = None" in src)
+ok("切换大小（陪画时带子变了）也不会被拽回默认角",
+   "self._update_window_rect()   # 拖过就回主人放的位置" in src)
 
 print("\n结果：%d 通过 / %d 失败" % (ok_n, bad_n))
 sys.exit(1 if bad_n else 0)

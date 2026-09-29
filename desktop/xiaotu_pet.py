@@ -12,6 +12,7 @@ DQ速写计时姬 · 桌面版启动器
 import ctypes
 import ctypes.wintypes as wt
 import glob
+import hashlib
 import http.server
 import json
 import math
@@ -30,14 +31,46 @@ import urllib.request
 from urllib.parse import quote, urlparse, parse_qs
 
 APP_NAME = "DQ小兔速写计时姬"      # 显示用（exe 名 / 桌宠窗口标题）
-APP_VER_FALLBACK = "V1.1"         # 只有读不到 index.html 时才用它（真正来源是 APP_VER）
+APP_VER_FALLBACK = "V1.2"         # 只有读不到 index.html 时才用它（真正来源是 APP_VER）
 # 数据目录沿用最初的名字，改名也不会导致网页资源和浏览器档案重新生成一遍
 DATA_NAME = "DQ速写计时姬"
 PET_CLASS = "DQXiaotuPetWnd"
 PET = None        # 桌宠实例（供 HTTP 处理器调用陪画模式）
 PURE_WIN = None   # 纯净参考图模式的独立大图窗口实例
+PURE_LAST_POS = None  # 参考图大窗上次待的位置（左上角 x,y）：跳过 / 自动换图都接着开在这儿
 PAGE_HWND = None  # 速写主界面（浏览器 --app 窗口）句柄，打开后记住它，别靠标题临时找
 PAGE_PID = None   # 自己拉起的浏览器进程号：退出桌宠时如需强关，只动这一个实例
+
+
+def set_pure_last_pos(x, y):
+    """记住参考图大窗的位置。
+
+    主人把大图拖到哪儿、从哪儿关掉，下次换图（点「跳过」或自动轮播到下一张）
+    就还开在同一个地方 —— 以前每次换图都按屏幕中心重排，拖好的位置白拖。
+    只活在本次运行里（退出程序就回到「鼠标那块屏居中」的默认行为）。
+    """
+    global PURE_LAST_POS
+    try:
+        PURE_LAST_POS = (int(x), int(y))
+    except Exception:
+        PURE_LAST_POS = None
+
+
+def pure_last_pos():
+    """上次参考图大窗的位置；没开过就是 None（走默认的屏幕居中）。"""
+    return PURE_LAST_POS
+
+
+def _clamp_v(v, lo, hi):
+    """把 v 夹进 [lo,hi]；区间反了（窗口比工作区还大）就取 lo。"""
+    try:
+        v = int(v)
+    except Exception:
+        return int(lo)
+    lo, hi = int(lo), int(hi)
+    if hi < lo:
+        return lo
+    return max(lo, min(v, hi))
 
 
 def ensure_pure_window():
@@ -382,19 +415,30 @@ def web_home():
 
 
 def _fingerprint(root):
+    """网页资源的「指纹」：文件数 + 总大小 + **内容 md5**。
+
+    ⚠️ 只比大小是不够的（2026-09-29 实测踩到）：V1.1 → V1.2 这种改动字节数一模一样，
+       指纹不变 → exe 不会把新网页同步到固定目录 → 桌面端还读着上一版，
+       版本号、文案改了但 exe 里没跟上。加上内容 md5 后，任何一处文字变化都会触发同步。
+    """
     n = 0
     size = 0
+    h = hashlib.md5()
     for p in (os.path.join(root, "index.html"), os.path.join(root, "assets", "guides.js")):
         if os.path.exists(p):
-            size += os.path.getsize(p)
+            with open(p, "rb") as f:
+                b = f.read()
+            size += len(b)
+            h.update(b)
     for dirpath, _, files in os.walk(os.path.join(root, "assets")):
         n += len(files)
         for f in files:
             try:
-                size += os.path.getsize(os.path.join(dirpath, f))
+                with open(os.path.join(dirpath, f), "rb") as f2:
+                    size += len(f2.read())
             except OSError:
                 pass
-    return "%d_%d" % (n, size)
+    return "%d_%d_%s" % (n, size, h.hexdigest())
 
 
 def materialize_web():
@@ -1327,6 +1371,10 @@ class PetWindow:
         self.base_y = 0
         self.x = 0
         self.y = 0
+        # 主人拖过之后记住的位置：左边 x + 底边 y（None = 还没拖过，用默认角）
+        # ⚠️ 记「底边」不记「顶边」：头顶那条带子（气泡 / 计时圆盘）会变高，
+        #    底边不动 → 带子往上长，小兔的脚不会跟着挪。
+        self.anchor = None
         self.hbmp = None
         self.hdc_mem = None
         self.scale = dpi_scale()
@@ -1353,6 +1401,7 @@ class PetWindow:
         self.timer_label = ""
         # 纯净参考图模式：只留置顶大图，主界面最小化（滚轮缩放 / 右键另存）
         self.pure = False              # 是否处于纯净参考图模式
+        self._last_pure_src = None     # 最近一次进参考图模式用的那张图（右键「返回当前参考图模式」要用）
         self.zoom = 1.0                # 缩放倍率 0.5 ~ 2.0
         self._pure_img = None          # 原图（RGBA，全分辨率，供缩放重采样）
         self._pure_base = None         # 基准显示尺寸 (w, h)，zoom=1.0 时的大小
@@ -1455,6 +1504,13 @@ class PetWindow:
 
     # -- 窗口位置（含气泡带时把桌宠贴到工作区底部，气泡在头顶上方）----
     def _update_window_rect(self):
+        """重排小兔窗口：**主人拖过就留在主人放的位置**，没拖过才回默认角。
+
+        ⚠️ 2026-09-29 修：以前这里每次都硬算「工作区右下角」，于是小兔一说话、
+        一开倒计时、一进/出参考图模式就被拽回那个角 —— 拖到哪儿都白拖。
+        现在拖过之后按 anchor=(左边, 底边) 还原：带子变高只是往上长，小兔的脚不动；
+        位置还会夹进当前工作区，改分辨率 / 拔掉副屏也不会把它丢到屏幕外。
+        """
         if not self.hwnd:
             return
         h = (self._pil.size[1] if self._pil
@@ -1466,8 +1522,14 @@ class PetWindow:
         margin = int(round(24 * self.scale))
         total_h = h + band
         total_w = w                       # 倒计时改到头顶圆盘里，窗口不再向左加宽
-        self.x = wa.right - total_w - margin
-        self.y = wa.bottom - total_h - margin
+        if self.anchor:
+            ax, abottom = self.anchor
+            self.x = _clamp_v(ax, wa.left + margin, wa.right - total_w - margin)
+            self.y = _clamp_v(abottom, wa.top + margin + total_h,
+                              wa.bottom - margin) - total_h
+        else:
+            self.x = wa.right - total_w - margin
+            self.y = wa.bottom - total_h - margin
         self.base_y = self.y
         user32.SetWindowPos(self.hwnd, None, self.x, self.y, 0, 0,
                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
@@ -1716,6 +1778,8 @@ class PetWindow:
         看起来就是「界面慢慢缩小」；现在点下去界面瞬间就没了。
         万一大图没起来，再把主界面还回去（回滚），不会把用户晾在空白桌面。
         """
+        if self._display_src:
+            self._last_pure_src = self._display_src   # 记住这张图：右键「返回当前参考图模式」要能回到它
         try:
             hide_page_window()               # ① 主界面立刻消失（SW_HIDE，无动画）
         except Exception:
@@ -1749,6 +1813,37 @@ class PetWindow:
             log("enter_pure：重排/重绘失败\n" + traceback_str())
         log("enter_pure 完成 base=%s" % (pw._pure_base,))
         return True
+
+    def has_pure_src(self):
+        """现在有没有「能回到参考图模式」的那张图（决定右键菜单要不要显示那一项）。"""
+        if self._last_pure_src:
+            return True
+        pw = PURE_WIN
+        return bool(pw is not None and getattr(pw, "_display_src", None))
+
+    def back_to_pure(self):
+        """右键「返回当前参考图模式」：把刚才那张参考图的大窗再唤回来。
+
+        网页模式下（主界面开着）想回到只剩一张图的纯净画面时用它。
+        ⚠️ 只负责「回到画面」，不会重开计时、不会跳到下一张——当前这一组照常继续。
+        """
+        if self.pure:
+            return True                       # 已经在参考图模式里了
+        src = self._last_pure_src
+        if not src:
+            pw = PURE_WIN
+            src = getattr(pw, "_display_src", None) if pw is not None else None
+        if not src:
+            self.say("还没有参考图，先在页面上传一张吧", 6)
+            log("返回参考图模式：手上没有可参考的图")
+            return False
+        self._display_src = src
+        ok = self.enter_pure()
+        if ok:
+            log("已返回当前参考图模式")
+        else:
+            self.say("没能把参考图唤回来，看看页面还在不在", 6)
+        return ok
 
     def _monitor_work_area(self, rect=None):
         """取「窗口（或给定矩形）所在那块显示器」的工作区。
@@ -1815,11 +1910,15 @@ class PetWindow:
                     min(cy - self._h // 2, wa.bottom - margin - self._h))
         return x, y
 
-    def _apply_pure_zoom(self, keep_center="cur", anchor=None):
+    def _apply_pure_zoom(self, keep_center="cur", anchor=None, pos=None):
         """按 self.zoom 重采样大图；keep_center='cur' 时保持窗口中心不动。
 
         anchor=(mx,my) 时改成**以鼠标为中心**缩放：鼠标指着图上的哪一点，
         缩放后那一点还在鼠标底下（2026-09-29 改，以前一律按窗口中心，放大后就飘了）。
+
+        pos=(x,y)：换图时用，把窗口左上角放到这个位置（跳过 / 自动轮播都走它，
+        免得每次换图都按屏幕中心重排、把主人拖好的位置弄丢）。仍然会夹进
+        所在的那一块工作区，换张长图也不会跑出屏幕。
 
         ⚠️ 宽高始终按同一个倍率走（`_fit_pure_size` 等比夹取），顶到屏幕/工作区
            边缘时只会停下不再变大，**绝不会把图横向拉宽、拉变形**。
@@ -1827,8 +1926,15 @@ class PetWindow:
         """
         from PIL import Image
         bw, bh = self._pure_base
-        # 首次弹图：开在鼠标所在那块屏；之后缩放：始终留在窗口当前所在那块屏
-        wa = self._monitor_work_area() if keep_center == "cur" else self._pointer_work_area()
+        # 换图：回到上次那个位置所在的那块屏；首次弹图：开在鼠标所在那块屏；
+        # 之后缩放：始终留在窗口当前所在那块屏
+        if pos is not None:
+            wa = self._monitor_work_area(RECT(int(pos[0]), int(pos[1]),
+                                             int(pos[0]) + 1, int(pos[1]) + 1))
+        elif keep_center == "cur":
+            wa = self._monitor_work_area()
+        else:
+            wa = self._pointer_work_area()
         margin = int(round(16 * self.scale))
         w, h = self._fit_pure_size(max(1, int(round(bw * self.zoom))),
                                    max(1, int(round(bh * self.zoom))), wa, margin)
@@ -1843,6 +1949,10 @@ class PetWindow:
             ry = min(1.0, max(0.0, (my - self.y) / float(self._h)))
             cx = int(round(mx - rx * w + w / 2.0))
             cy = int(round(my - ry * h + h / 2.0))
+        elif pos is not None:
+            # 换了新图：还是开在上次那个左上角（_clamp_into_area 会把超出的部分夹回来）
+            cx = int(pos[0]) + w // 2
+            cy = int(pos[1]) + h // 2
         elif keep_center == "cur" and self.hwnd:
             cx = self.x + (self._w or w) // 2
             cy = self.y + (self._h or h) // 2
@@ -1917,6 +2027,7 @@ class PetWindow:
             self.base_y = self.y
             user32.SetWindowPos(self.hwnd, None, self.x, self.y, 0, 0,
                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+            set_pure_last_pos(self.x, self.y)     # 搬过屏之后，换图也留在这块屏
             log("参考图已移到第 %d 块屏幕 (%d,%d)" % ((idx + 1) % len(areas) + 1, self.x, self.y))
             return True
         except Exception:
@@ -1995,7 +2106,10 @@ class PetWindow:
             self.pure = True
             self.band = 0
             self.bubble_kind = None
-            self._apply_pure_zoom(keep_center=None)      # 首次：屏幕居中
+            # 上次的大图停在哪儿，这次（点跳过 / 自动轮播的下一张）就还开在哪儿；
+            # 从来没开过才按「鼠标那块屏居中」弹出来。
+            self._apply_pure_zoom(keep_center=None, pos=pure_last_pos())
+            set_pure_last_pos(self.x, self.y)            # 夹过边界的也认，下次别再漂
             user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
             self.visible = True
             return True
@@ -2004,6 +2118,15 @@ class PetWindow:
             return False
 
     def hide(self):
+        """收起窗口。参考图大窗关之前先把位置记下来，下次换图接着开在这儿。"""
+        if self.kind == "pure":
+            try:
+                r = RECT()
+                if self.hwnd and user32.GetWindowRect(self.hwnd, ctypes.byref(r)):
+                    if (r.right - r.left) > 1 and (r.bottom - r.top) > 1:
+                        set_pure_last_pos(r.left, r.top)
+            except Exception:
+                pass
         self.pure = False
         if self.hwnd:
             user32.ShowWindow(self.hwnd, SW_HIDE)
@@ -2351,8 +2474,13 @@ class PetWindow:
         if self.companion_on:
             # 陪画时窗口含气泡带，保持桌宠底部不动：用 None 让 create 重新贴底排版
             self.create(idx)
+            if self.anchor:
+                self._update_window_rect()   # 拖过就回主人放的位置，别被拽回默认角
         else:
             self.create(idx, x=rect.left, y=rect.top)
+        r2 = RECT()                          # 换了尺寸：按新高度重新记一遍底边
+        user32.GetWindowRect(self.hwnd, ctypes.byref(r2))
+        self.anchor = (r2.left, r2.bottom)
 
     def set_topmost(self, on):
         self.topmost = bool(on)
@@ -2393,6 +2521,9 @@ class PetWindow:
             user32.AppendMenuW(hmenu, MF_STRING, 21, "显示主界面")
             user32.AppendMenuW(hmenu, MF_STRING, 22, "退出速写（回到主界面）")
         user32.AppendMenuW(hmenu, MF_STRING, 1, "打开速写页面")
+        # 网页模式下（主界面开着）才显示：一键回到「只剩一张参考图」的纯净画面
+        if not self.pure and self.has_pure_src():
+            user32.AppendMenuW(hmenu, MF_STRING, 25, "返回当前参考图模式")
         if self._display_src:
             user32.AppendMenuW(hmenu, MF_STRING, 20, "图片另存为…")
 
@@ -2445,6 +2576,8 @@ class PetWindow:
             self.pure_to_next_monitor()  # 多屏：把参考图搬到下一块屏（仍置顶）
         elif cmd == 24:
             self.toggle_flip()           # 左右镜像参考图（只有右键菜单这一个入口）
+        elif cmd == 25:
+            self.back_to_pure()          # 网页模式 → 回到当前这张参考图的纯净画面
         elif cmd == 2:
             self.set_topmost(not self.topmost)
         elif cmd == 3:
@@ -2599,6 +2732,16 @@ class PetWindow:
                 if self.dragging:
                     self.dragging = False
                     user32.ReleaseCapture()
+                    if self.drag_moved >= 5:
+                        # 真的拖过了：把位置记住，之后说话 / 计时 / 换图都不会把它拽回去
+                        r = RECT()
+                        if user32.GetWindowRect(hwnd, ctypes.byref(r)):
+                            if self.kind == "pure":
+                                set_pure_last_pos(r.left, r.top)
+                            else:
+                                # 记底边（用 base_y，别把呼吸动画那几像素算进去）
+                                self.anchor = (r.left,
+                                               self.base_y + (r.bottom - r.top))
                     # 纯净模式下单击不开页：只留大图，唤回走右键菜单/双击
                     if self.drag_moved < 5 and not self.pure:
                         open_page()

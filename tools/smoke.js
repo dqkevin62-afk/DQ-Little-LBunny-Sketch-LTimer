@@ -143,7 +143,7 @@ ok("字体栈仍写死在 CSS 变量里",
 ok("字体仍由 misans.css 引入", /href="assets\/fonts\/misans\.css"/.test(html));
 
 // 改版本只改 index.html 里的 APP_VER（侧栏 + 桌面 exe 都从那儿读），并给 CHANGELOG 加一节
-const VER = "V1.1";
+const VER = "V1.2";
 console.log("\n【标题改为 DQ小兔速写计时姬 + 小小的 " + VER + "】");
 const sbH1 = d.querySelector("#sidebar h1");
 ok("侧栏标题已改名", sbH1.textContent.replace(/\s+/g, "") === "DQ小兔速写计时姬" + VER);
@@ -1110,6 +1110,23 @@ ok("顶到边缘只等比收住，绝不横向拉伸（_fit_pure_size 宽高同�
   /h = max\(1, int\(round\(h \* r\)\)\)/.test(pet));
 ok("在小兔身上滚：鼠标不在图上 → 按大图中心缩放（不传锚点）",
   /PURE_WIN\.pure_zoom_step\(1 if delta > 0 else -1\)/.test(pet));
+
+console.log("\n【右键小兔：「返回当前参考图模式」】");
+ok("桌宠右键菜单新增「返回当前参考图模式」（命令 25）",
+  pet.includes('"返回当前参考图模式"') && /25, "返回当前参考图模式"/.test(pet) &&
+  /elif cmd == 25:/.test(pet) && /self\.back_to_pure\(\)/.test(pet));
+ok("只在网页模式下显示（纯净模式里已经有「显示主界面」，不重复）",
+  /if not self\.pure and self\.has_pure_src\(\):/.test(pet));
+ok("有 back_to_pure：把刚才那张图的大窗唤回来",
+  /def back_to_pure\(self\)/.test(pet) && /self\._display_src = src/.test(pet) &&
+  /ok = self\.enter_pure\(\)/.test(pet));
+ok("进模式时记住那张图（_last_pure_src）",
+  /self\._last_pure_src = self\._display_src/.test(pet) &&
+  /self\._last_pure_src = None/.test(pet));
+ok("没有图时不会硬进（小兔会提示先上传）",
+  /还没.*参考图|还没有参考图/.test(pet) && /返回参考图模式：手上没有可参考的图/.test(pet));
+ok("已经在参考图模式里就直接返回，不重复进入",
+  /if self\.pure:\s*\n\s*return True/.test(pet));
 ok("桌面端含 POST /pet_pure 原子入口", pet.includes('"/pet_pure"'));
 // ⚠️ HTTP 请求线程上建窗口：ThreadingHTTPServer 每请求一个线程，
 //    请求结束线程退出 → 它建的窗口立刻被销毁（参考图大窗一闪就没）。
@@ -1345,11 +1362,16 @@ console.log("\n【版本号：一处改动，网页 + exe 一起跟上】");
 ok("桌面端不再写死版本号，改成读 index.html 的 APP_VER",
   /def app_version\(\)/.test(pet) && /APP_VER\\s\*=\\s\*"/.test(pet) &&
   !/"V1\.0\.0 · 一起练速写吧"/.test(pet) && !/"V1\.0\.0 ·/.test(pet));
-ok("读不到时还有兜底版本（不会变成空白）", /APP_VER_FALLBACK = "V1.1"/.test(pet));
+ok("读不到时还有兜底版本（不会变成空白）",
+  new RegExp('APP_VER_FALLBACK = "' + VER + '"').test(pet));
 ok("分享卡片上的版本号是拼出来的（跟着 APP_VER 走）",
   /"%s · 一起练速写吧" % app_version\(\)/.test(pet));
 ok("启动日志会打印版本号（方便核对 exe 是哪一版）",
   /log\("%s %s 启动" % \(APP_NAME, app_version\(\)\)\)/.test(pet));
+// ⚠️ 指纹只看「文件数 + 总大小」是不够的：V1.1→V1.2 字节数一样，exe 就不会同步新网页
+ok("网页同步指纹带内容 md5（同尺寸的改动也能被发现）",
+  /def _fingerprint\(root\)/.test(pet) && /hashlib\.md5\(\)/.test(pet) &&
+  /return "%d_%d_%s" % \(n, size, h\.hexdigest\(\)\)/.test(pet));
 
 console.log("\n【更新记录 CHANGELOG.md】");
 const clPath = path.join(ROOT, "CHANGELOG.md");
