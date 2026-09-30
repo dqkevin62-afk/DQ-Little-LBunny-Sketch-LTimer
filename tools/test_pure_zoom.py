@@ -199,6 +199,102 @@ ok("拖动结束 / 关掉大图都会把位置记下来",
    src.count("set_pure_last_pos(r.left, r.top)"))
 ok("搬去下一块屏后也记新位置", "set_pure_last_pos(self.x, self.y)     # 搬过屏之后" in src)
 
+print("\n【回到参考图模式：连上次的大小一起还原】")
+X.PURE_LAST_POS = None
+X.PURE_LAST_SIZE = None
+pw = make_pure(base=(400, 300))                    # 第一次开图：默认大小
+pw._apply_pure_zoom(keep_center=None, pos=None)
+base_size = (pw._w, pw._h)
+ok("第一次出图是默认大小", base_size == (400, 300), base_size)
+ok("出图后把大小记下来了", X.pure_last_size() == base_size, X.pure_last_size())
+pw.zoom = 1.0
+pw.pure_zoom_step(1)                               # 主人放大了一格
+big = X.pure_last_size()
+ok("放大会记下更大的尺寸", big[0] > base_size[0] and big[1] > base_size[1], (base_size, big))
+
+
+def reopen(base, last_zoom, last_pos=(300, 200)):
+    """模拟「点继续回到参考图模式」/「跳过换下一张」：走一遍 show_image 的缩放计算。"""
+    p = make_pure(base=base)
+    p._pure_base = base
+    p.zoom = max(p.PURE_ZOOM_MIN, min(p.PURE_ZOOM_MAX, last_zoom)) if last_zoom else 1.0
+    p._apply_pure_zoom(keep_center=None, pos=last_pos)
+    return p
+
+
+z_big = X.pure_last_zoom()                         # 刚才放大那一格的倍率
+ok("放大会记下倍率", abs(z_big - 1.15) < 1e-6, z_big)
+p2 = reopen((400, 300), z_big)                     # 同一张图：大小原样还原
+ok("同一张图回到大图：大小和上次一模一样", (p2._w, p2._h) == big, ((p2._w, p2._h), big))
+p3 = reopen((400, 300), None)                      # 没有记过：回到默认
+ok("没记过倍率就按 100% 出图", (p3._w, p3._h) == (400, 300), (p3._w, p3._h))
+p4 = reopen((800, 300), z_big)                     # 跳过换了一张长条图：同一个倍率
+ok("换了不同比例的图：等比缩放，不会被拉变形",
+   abs((p4._w / float(p4._h)) - (800 / 300.0)) < 0.01, "%sx%s" % (p4._w, p4._h))
+ok("跳过换图沿用同一个缩放比例", abs(p4.zoom - z_big) < 1e-6, (p4.zoom, z_big))
+ok("倍率仍夹在 50%~200%", 0.5 - 1e-6 <= p4.zoom <= 2.0 + 1e-6, p4.zoom)
+ok("位置照旧沿用（缩放记忆不干扰位置）", (p4.x, p4.y) == (300, 200), (p4.x, p4.y))
+
+print("\n【跳过这张图 / ~ 暂停：桌面端只置信号，交给网页执行】")
+X.PURE_SKIP_REQ = False
+X.PURE_PAUSE_WANT = None
+ok("默认没有待处理的跳过信号", X.take_pure_skip() is False)
+X.request_pure_skip()
+ok("请求跳过后能取到", X.take_pure_skip() is True)
+ok("取过一次就清掉（不会连跳两张）", X.take_pure_skip() is False)
+ok("默认没有待处理的暂停指令", X.take_pure_pause() is None)
+X.request_pure_pause(True)
+ok("请求暂停：取到的是「要暂停」", X.take_pure_pause() is True)
+ok("取过一次就清掉", X.take_pure_pause() is None)
+X.request_pure_pause(False)
+ok("请求继续：取到的是「要继续」（不是切换一下，两边不会错开）",
+   X.take_pure_pause() is False)
+ok("菜单命令 26 接到 skip_current_ref",
+   "cmd == 26" in src and "self.skip_current_ref()" in src)
+ok("~ 键接到 toggle_pause", "self.toggle_pause()" in src and "def toggle_pause" in src)
+ok("大图右键菜单里有「跳过这张图」", '"跳过这张图' in src and "26, " in src)
+ok("桌宠右键也要在练的时候才有这一项", "if self.in_session():" in src)
+ok("没在练（心跳停了）就不显示", "time.time() - self._timer_at) < 3.0" in src)
+ok("桌宠右键一直有「暂停 / 继续」切换", '"继续速写\\t~" if self._pause_hold else "暂停速写\\t~"' in src)
+ok("菜单 27 与 ~ 键同一套", "cmd == 27" in src and "self.toggle_pause()          # 暂停 / 继续" in src)
+
+print("\n【~ 暂停：小兔立刻停 / 大图蒙版 / 恢复时 3 2 1】")
+import time as _t
+
+
+def make_pw():
+    p = X.PetWindow.__new__(X.PetWindow)
+    p.kind = "pure"
+    p.scale = 1.0
+    p._font = None
+    p.hwnd = 12345                 # 假装有窗口（真建窗要起消息循环）
+    p.visible = True
+    p.pure_paused = False
+    p._resume_step = -1
+    p._resume_until = 0.0
+    return p
+
+
+pw = make_pw()
+pw.set_pure_paused(True)
+ok("暂停：大图蒙上暂停层", pw.pure_paused is True)
+ok("开始恢复：蒙版立刻撤掉", pw.start_resume_countdown() and pw.pure_paused is False)
+ok("先显示「继续速写」", pw._resume_title()[0] == "继续速写")
+seen = []
+for _ in range(4):
+    pw._resume_until = _t.time() - 1
+    pw._tick_resume()
+    if pw._resume_step >= 0:
+        seen.append(pw._resume_title()[0])
+ok("接着播 3 → 2 → 1", seen == ["3", "2", "1"], seen)
+ok("播完了才让网页继续（不是一按就放）", X.take_pure_pause() is False)
+pw.set_pure_paused(True)
+pw.start_resume_countdown()
+pw.cancel_resume()
+ok("倒数到一半又按 ~：回到暂停，动画停下",
+   pw.pure_paused is True and pw._resume_step == -1)
+X.PURE_PAUSE_WANT = None
+
 print("\n【小兔：拖到哪儿就在哪儿，说话 / 计时都不再跳回默认角】")
 pet = X.PetWindow.__new__(X.PetWindow)
 pet.kind = "pet"

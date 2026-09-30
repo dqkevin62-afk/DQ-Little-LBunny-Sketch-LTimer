@@ -32,7 +32,9 @@ if "--exe" in sys.argv:
               else os.path.join(ROOT, "dist", "DQ小兔速写计时姬.exe"))
 LOG_PATH = os.path.join(os.environ.get("TEMP", "."), "DQ-speed-sketch.log")
 PURE_CLASS = "DQXiaotuPetWndPure"
+PET_CLASS = "DQXiaotuPetWnd"
 WM_HOTKEY = 0x0312
+WM_CLOSE = 0x0010
 HOTKEY_FLIP_ID = 0x51A1
 VK_H = 0x48
 MOD_NOREPEAT = 0x4000
@@ -84,18 +86,51 @@ def to_data_uri(img):
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def find_pure():
+def find_class(cls):
     hit = []
 
     def cb(h, _):
         b = ctypes.create_unicode_buffer(256)
         u.GetClassNameW(h, b, 256)
-        if b.value == PURE_CLASS:
+        if b.value == cls:
             hit.append(h)
         return True
 
     u.EnumWindows(EP(cb), None)
     return hit[0] if hit else None
+
+
+def find_pure():
+    return find_class(PURE_CLASS)
+
+
+def ping(timeout=1.0):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:18765/ping", timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def ensure_no_pet(wait=10.0):
+    """跑真进程那段之前，先把上次留下的小兔请走。
+
+    ⚠️ 2026-09-30 踩：残留实例占着**单实例互斥体**和 **~ / Ctrl+1 全局热键**，
+    新起的进程一看「已有小兔在运行」就直接退出了，请求全被那只旧小兔接走 ——
+    它早就注册过热键，不会再打「参考图模式快捷键：已注册」，断言就莫名其妙地红。
+    这里先礼貌地 WM_CLOSE 掉旧窗口，等端口放开再开始。
+    """
+    if not ping():
+        return True
+    hwnd = find_class(PET_CLASS)
+    if hwnd:
+        u.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+    t0 = time.time()
+    while time.time() - t0 < wait:
+        if not ping():
+            return True
+        time.sleep(0.4)
+    return not ping()
 
 
 def logtext():
@@ -149,6 +184,8 @@ def part_offscreen():
 
 def part_hotkey():
     print("\n【B 真进程：小兔不许抢 H 键】")
+    ok("跑之前没有残留的小兔实例（不然单实例锁 + 全局热键会串台）",
+       ensure_no_pet())
     base = len(logtext())
     cmd = [TARGET, "--no-page"] if TARGET else [sys.executable, SRC, "--no-page"]
     print("[i] 启动：" + cmd[0])
@@ -170,7 +207,12 @@ def part_hotkey():
         hwnd = find_pure()
         ok("纯净大图窗口已建出来", bool(hwnd), str(hwnd))
         tail = logtext()[base:]
-        ok("进纯净模式时不注册任何热键", "翻转快捷键 H 已注册" not in tail, tail[-200:])
+        ok("这次跑的就是刚起的这只小兔（没被旧实例截胡）",
+           "已有小兔在运行" not in tail)
+        ok("进纯净模式只注册 ~ / Ctrl+1（翻转热键 H 依然没有）",
+           "参考图模式快捷键：已注册" in tail and "翻转快捷键 H 已注册" not in tail,
+           tail[-300:])
+        # H 必须一直是自由的（以前打字打不出 H 就是它抢的）
 
         # 关键点：纯净模式里 H 还是自由的（别的程序 / 主人打字能正常用）
         got = u.RegisterHotKey(None, 0x7AB1, MOD_NOREPEAT, VK_H)
@@ -188,8 +230,10 @@ def part_hotkey():
         except Exception:
             pass
         time.sleep(1.2)
-        ok("退出纯净模式也没有「释放热键」这类日志",
+        ok("退出纯净模式也没有「释放 H 热键」这类日志",
            "翻转快捷键 H 已释放" not in logtext()[base:])
+        ok("退出参考图模式后 ~ / Ctrl+1 立刻还给系统",
+           "参考图模式快捷键：已注销" in logtext()[base:], logtext()[base:][-300:])
     finally:
         env = dict(os.environ, MSYS_NO_PATHCONV="1")
         subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],

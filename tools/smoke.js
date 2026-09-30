@@ -70,7 +70,9 @@ ok(".card 使用 --shadow", /\.card\s*\{[^}]*box-shadow:\s*var\(--shadow\)/s.tes
 ok("画布卡片是白色厚内框（设备框质感）", /\.stage\.card\s*\{[^}]*border:\s*7px solid var\(--card\)/s.test(css));
 ok("设备框外圈淡紫描边", /\.stage\.card\s*\{[^}]*0 0 0 1\.5px var\(--line\)/s.test(css));
 ok("按钮为胶囊形 999px", /\.btn\s*\{[^}]*border-radius:\s*999px/s.test(css));
-ok("题词框为柔渐变底", /\.prompt-box\s*\{[^}]*linear-gradient/s.test(css));
+// 2026-09-30 DQ 要求：有参考图时不要再垫一层淡紫色，画面保持干净（图直接落在白卡片上）。
+ok("参考图方框不铺渐变底", !/\.prompt-box\s*\{[^}]*linear-gradient/s.test(css));
+ok("参考图方框不铺纯色底", !/\.prompt-box\s*\{[^}]*background\s*:/s.test(css));
 ok("进度条为胶囊标签", /\.progress-line\s*\{[^}]*border-radius:\s*999px/s.test(css));
 ok("计时环底色跟随主题 .ring-track", css.includes(".ring-track { stroke: var(--pink-soft)"));
 ok("计时环主色跟随主题 #ring", /#ring\s*\{[^}]*stroke:\s*var\(--pink\)/s.test(css));
@@ -143,7 +145,7 @@ ok("字体栈仍写死在 CSS 变量里",
 ok("字体仍由 misans.css 引入", /href="assets\/fonts\/misans\.css"/.test(html));
 
 // 改版本只改 index.html 里的 APP_VER（侧栏 + 桌面 exe 都从那儿读），并给 CHANGELOG 加一节
-const VER = "V1.2";
+const VER = "V1.5";
 console.log("\n【标题改为 DQ小兔速写计时姬 + 小小的 " + VER + "】");
 const sbH1 = d.querySelector("#sidebar h1");
 ok("侧栏标题已改名", sbH1.textContent.replace(/\s+/g, "") === "DQ小兔速写计时姬" + VER);
@@ -167,6 +169,26 @@ ok("页面里已无旧名 DQ速写计时姬（含 i18n 词条）", !/DQ速写计
   "残留 " + ((html.match(/DQ速写计时姬/g) || []).length) + " 处");
 ok("标题不会被挤出侧栏（字号已收窄到 16px）",
   /#sidebar h1 \{[^}]*font-size:\s*16px/s.test(css) && /#sidebar h1 \{[^}]*white-space:\s*nowrap/s.test(css));
+
+console.log("\n【小兔形象素材（2026-09-30 换新立绘）】");
+// 素材在 assets/ 里，jsdom 不会真的去请求图片 → 这里断言「引用路径 + 文件确实存在」
+const assetOf = p => fs.readFileSync(path.join(ROOT, p), "utf8");
+const sizeOf = p => fs.statSync(path.join(ROOT, p)).size;
+const avatarEl = d.querySelector("#sidebar .avatar");
+ok("标题前有圆形头像元素", !!avatarEl && /assets\/xiaotu-avatar\.png/.test(avatarEl.getAttribute("src")));
+ok("头像素材存在且有内容", sizeOf("assets/xiaotu-avatar.png") > 4096);
+ok("欢迎页形象换成新立绘（png，不再是旧 jpg）",
+  /assets\/dq-timer-hime\.png/.test(html) && !/dq-timer-hime\.jpg/.test(html));
+ok("旧的黄底 jpg 已删除", !fs.existsSync(path.join(ROOT, "assets", "dq-timer-hime.jpg")));
+ok("favicon 仍指向 dq-chibi.png（内容已换成新形象，HTML 不用改）",
+  /<link rel="icon" href="assets\/dq-chibi\.png">/.test(html) && sizeOf("assets/dq-chibi.png") > 4096);
+["assets/pet/xiaotu-pet.png", "assets/pet/xiaotu-pet-220.png", "assets/pet/xiaotu-pet-64.png",
+ "assets/pet/xiaotu-icon.png", "assets/pet/xiaotu-icon-64.png", "assets/pet/xiaotu.ico"]
+  .forEach(f => ok("桌宠素材 " + f.split("/").pop() + " 存在且有内容", sizeOf(f) > 2048));
+// 新立绘是「已抠好的透明图」，抠图工具不能再走去黄边那条路（会把线稿啃掉一圈）
+ok("抠图工具认得出「已经是透明图」的源（不再去黄边）",
+  /def is_cutout/.test(assetOf("tools/make-pet.py")) &&
+  /if cutout:/.test(assetOf("tools/make-pet.py")));
 
 console.log("\n【上传参考图后：右侧画布只显示参考图，隐藏小兔形象，保留下方文字】");
 const himeImg = d.querySelector("#screen-welcome .hime-img");
@@ -631,6 +653,38 @@ ok("倒计时 按钮文案「跳过」", $("#btn-skip").textContent === "跳过"
 w.eval("S.timing='up'; S.phaseStart=Date.now()-5000; S.idx=0; S.queue=[{txt:'x'}]; nextPrompt();");
 ok("正向计时 手动切换记录已画时长(focusSec>0)", w.eval("S.focusSec") > 0);
 
+console.log("\n【只选 1 张图时点「跳过」：提示一句就收尾回主界面（2026-09-30 DQ 定）】");
+// 场景：只传 1 张参考图 + 张数 10 → 队列里 9 个位置都是同一张占出来的空位。
+// 以前「跳过」会一张张空转，最后把人送到结算页；现在直接提示 + 回主界面。
+ok("提示语就是「已经是最后一张图」（DQ 原文）",
+  /const NO_NEXT_TEXT = "已经是最后一张图";/.test(html));
+ok("没有下一张就走 endGroupToWelcome（不走 finish / 结算页）",
+  /if \(S\.images\.length <= 1\) \{ endGroupToWelcome\(NO_NEXT_TEXT\); return; \}/.test(html));
+ok("endGroupToWelcome 定义在 finish 后面，且不含 showScreen(\"summary\")",
+  /function endGroupToWelcome\(msg\)[\s\S]{0,500}showScreen\("welcome"\)/.test(html) &&
+  !/function endGroupToWelcome\(msg\)[\s\S]{0,400}showScreen\("summary"\)/.test(html));
+ok("endGroupToWelcome 收尾齐全：停计时 / 停滴答 / 结束陪画 / 退出纯净模式 / 让延迟计时失效",
+  /function endGroupToWelcome\(msg\)[\s\S]{0,400}clearInterval\(S\.timer\)[\s\S]{0,200}stopTick\(\)[\s\S]{0,200}compSessionEnd\(\)[\s\S]{0,200}petPureEnd\(\)[\s\S]{0,200}S\.phase = "idle"; S\.readyToken\+\+/.test(html));
+ok("提示走小兔气泡（petSay）", /function endGroupToWelcome\(msg\)[\s\S]{0,400}petSay\(msg, 7\)/.test(html));
+ok("顺带刷新侧栏打卡 / 速写值", /function endGroupToWelcome\(msg\)[\s\S]{0,500}renderStats\(\)/.test(html));
+// 真跑一遍：1 张图 + 10 张队列 → 跳过 → 回主界面、phase 归 idle
+w.eval("S.count=10; S.timing='down'; S.imgStore.image=['blob:only-one']; syncImages();" +
+       "buildQueue(); S.idx=0; S.doneCount=0; S.focusSec=0; showScreen('practice'); startPhase('draw', 27);");
+ok("1 张图 + 10 张：队列被撑成 10 个位置（同一张重复占位，这才是空转的根源）",
+  w.eval("S.queue.length") === 10 && w.eval("S.images.length") === 1);
+const tokBefore = w.eval("S.readyToken");
+w.eval("nextPrompt();");
+ok("1 张图点跳过 → 回主界面（不是结算页）",
+  $("#screen-welcome").hidden === false && $("#screen-summary").hidden === true &&
+  $("#screen-practice").hidden === true);
+ok("1 张图点跳过 → phase 归 idle，readyToken 自增（把延迟中的计时作废）",
+  w.eval("S.phase") === "idle" && w.eval("S.readyToken") === tokBefore + 1);
+// 多图不能被带坏：3 张图 + 10 张队列，跳过应该照旧往后走一张、留在练习页
+w.eval("S.imgStore.image=['blob:a','blob:b','blob:c']; syncImages(); buildQueue();" +
+       "S.idx=0; S.phase='draw'; showScreen('practice'); startPhase('draw', 27); nextPrompt();");
+ok("3 张图时跳过照旧跳下一张（idx 0 → 1，留在练习页）",
+  w.eval("S.idx") === 1 && $("#screen-practice").hidden === false && w.eval("S.phase") === "draw");
+
 console.log("\n【桌宠陪画模式】");
 ok("陪画：代理基址 127.0.0.1:18765", w.eval("PET_BASE") === "http://127.0.0.1:18765");
 ok("陪画：COMP_PHRASE 含 tired/doze 文案",
@@ -869,8 +923,42 @@ $('#pet-top-row [data-pet-top="0"]').click();
 ok("点「关」后 petPrefTop=false", w.eval("petPrefTop()") === false);
 ok("练习页的「桌宠置顶」快捷按钮已删（练习中不再显示开关）",
   !$("#btn-pet-pin") && !/btn-pet-pin/.test(html) && !/renderPinBtn/.test(html));
-ok("练习页控制区只剩 暂停 / 跳过 / 结束",
-  $("#screen-practice .ctrls").querySelectorAll("button").length === 3);
+ok("练习页控制区没暂停时只有 暂停 / 跳过 / 结束（第 4 颗留到暂停时才露）",
+  Array.prototype.filter.call($("#screen-practice .ctrls").querySelectorAll("button"),
+    b => !b.hidden).map(b => b.id).join(",") === "btn-pause,btn-skip,btn-quit");
+// -- 练习页布局：中间整块留给图 / 计时环挪到右侧一列 / 三颗按钮横排一行 ----
+ok("三颗按钮横排成一行（.btn 全局是 width:100%，这里必须改回 auto）",
+  /\.ctrls \.btn \{[^}]*width: auto/.test(css) && /\.ctrls \.btn \{[^}]*display: inline-block/.test(css));
+ok("练习页卡片高度锁在视口内（默认不用滚动就看得见全部按钮）",
+  /#screen-practice \{[\s\S]{0,200}height: calc\(100vh - 64px\)/.test(css));
+ok("中间那行只有参考图一栏（右侧不再留计时列，图能开得更大）",
+  /\.practice-body \{ display: flex; flex: 1; min-height: 0/.test(css) &&
+  /#screen-practice \.prompt-box \{ flex: 1; min-width: 0/.test(css) &&
+  !/\.timer-side/.test(css));
+// -- 倒计时缩成按钮大小的小圆环，排在按钮排最前面（描边样式）----------
+ok("倒计时缩成跟按钮一样大小的小圆环（46px），排在按钮排最前面",
+  /\.mini-timer \{ flex: 0 0 auto; width: 46px; height: 46px/.test(css) &&
+  /<div class="ctrls">[\s\S]{0,200}class="mini-timer"[\s\S]{0,900}id="btn-pause"/.test(html));
+ok("小圆环和实心按钮区分开：只留一圈描边（加粗 stroke-width）",
+  /\.mini-timer circle \{ stroke-width: 16/.test(css) &&
+  /viewBox="0 0 260 260"/.test(html));
+ok("小圆环中间只显示数字（「绘制中」那行藏起来）",
+  /\.mini-timer \.ring-time \.p \{ display: none/.test(css) &&
+  /<div class="p" id="phase-text">/.test(html));   // 元素留着，JS 还在往里写阶段名
+ok("超过 100 秒显示 m:ss 时字号收小（tick 里切 .long）",
+  /\.mini-timer \.ring-time \.t\.long \{ font-size: 12px/.test(css) &&
+  /classList\.toggle\("long", c0 >= 100\)/.test(html) &&
+  /classList\.toggle\("long", c >= 100\)/.test(html));
+ok("不计时时整枚小圆环不占地方（兜底把文字收小，不顶到旁边按钮）",
+  /\.mini-timer:has\(\.ring-wrap\.timer-off\) \{ display: none/.test(css) &&
+  /\.mini-timer \.ring-wrap\.timer-off \.ring-time \.t \{ font-size: 12px/.test(css));
+ok("图有自己的「画布」层（绝对定位 → 图片 max-height:100% 才有确定参照高度）",
+  /\.shot \{[\s\S]{0,200}position: absolute/.test(css) &&
+  /\.prompt-box \.shot \{ top: 18px/.test(css) &&
+  /<div class="shot"><img src="\$\{item\.img\}"/.test(html));
+ok("图尽量大又不超框（max-width / max-height 都是 100%，不再是 55vh）",
+  /\.prompt-box img \{ max-width: 100%; max-height: 100%/.test(css) &&
+  !/\.prompt-box img \{[^}]*55vh/.test(css));
 ok("说明文案不再提练习页快捷开关",
   !$("#pet-top-note").textContent.includes("练习页")
   && $("#pet-top-note").textContent.includes("默认置顶显示"));
@@ -913,7 +1001,19 @@ ok("桌面端仍含 显示参考图 能力（set_display_image）",
 
 console.log("\n【纯净参考图模式：大图置顶 / 滚轮缩放 / 另存 / 唤回主界面】");
 ok("有参考图时欢迎屏显示开始按钮（CSS）",
-  /#welcome-img:not\(\[hidden\]\)\s*~\s*\.welcome\s+#btn-welcome-start/.test(css));
+  /#welcome-img:not\(\[hidden\]\)\s*~\s*\.welcome-bar\s+#btn-welcome-start/.test(css));
+// -- 欢迎页布局：参考图占满中间 / 按钮在底部整条横栏里居中 ------------
+ok("欢迎页高度锁在视口内（内容不再全挤在中间、下方按钮有落点）",
+  /#screen-welcome \{[\s\S]{0,160}height: calc\(100vh - 64px\)/.test(css));
+ok("参考图吃掉剩余空间（flex:1 → 图最大化、少留白）",
+  /#screen-welcome #welcome-img \{ flex: 1; min-height: 0/.test(css));
+ok("底部是一整条横栏、按钮居中（参考图不在 / 侧栏展开时整条栏不占地方）",
+  /\.welcome-bar \{[\s\S]{0,160}justify-content: center/.test(css) &&
+  /body:not\(\.sb-collapsed\) #welcome-img\[hidden\] ~ \.welcome-bar \{ display: none/.test(css) &&
+  /<div class="welcome-bar">[\s\S]{0,120}id="btn-welcome-start"/.test(html));
+ok("欢迎页的大图也走 .shot 画布（max-height 由 42vh 改成 100%）",
+  /#welcome-img \.shot|<div class="shot"><img id="welcome-img-el"/.test(html) &&
+  /#welcome-img img \{ max-width: 100%; max-height: 100%/.test(css));
 ok("已定义 petPureStart / petPureEnd",
   w.eval("typeof petPureStart") === "function" && w.eval("typeof petPureEnd") === "function");
 ok("欢迎屏开始按钮流程含纯净模式", html.includes("petPureStart(src)"));
@@ -926,7 +1026,7 @@ ok("纯净模式：参考图走独立大窗，小兔留右下角（不再让桌�
 ok("进入纯净模式先收起主界面，再建大图（点下去界面立刻没）",
   /def enter_pure[\s\S]{0,1200}hide_page_window\(\)[\s\S]{0,400}ensure_pure_window\(\)/.test(pet));
 ok("大图没起来会把主界面还回去（不至于把人晾在空白桌面）",
-  /show_image\(self\._display_src\)[\s\S]{0,300}restore_page_window\(\)/.test(pet));
+  /show_image\(src\)[\s\S]{0,300}restore_page_window\(\)/.test(pet));
 ok("大图窗口与桌宠用不同窗口类", pet.includes('PET_CLASS + ("Pure" if kind == "pure" else "")'));
 ok("纯净模式不冒气泡/不呼吸的旧限制已撤销（小兔照常陪画）",
   !/if self\.pure:\s*\n\s*return\s+# 纯净参考图模式/.test(pet));
@@ -1032,7 +1132,8 @@ ok("有 _clamp_into_area 把窗口夹进四条边",
 ok("比工作区还大时居中（不会顶出去）",
   /self\._w >= \(wa\.right - wa\.left - margin \* 2\)/.test(pet));
 ok("缩放后按所在屏夹取，不会只用主屏工作区",
-  /wa = self\._monitor_work_area\(\) if keep_center == "cur" else self\._pointer_work_area\(\)/.test(pet));
+  /wa = self\._monitor_work_area\(\) if keep_center == "cur" else self\._pointer_work_area\(\)/.test(pet)
+  || /elif keep_center == "cur":\s*wa = self\._monitor_work_area\(\)/.test(pet));
 
 console.log("\n【多屏：参考图大窗可搬到任意一块显示器（仍置顶）】");
 ok("有 MONITORINFO 结构", /class MONITORINFO\(ctypes\.Structure\)/.test(pet));
@@ -1082,10 +1183,13 @@ ok("已在翻转时菜单打勾", /MF_CHECKED if self\.flip_h else 0/.test(pet))
 ok("菜单命令 24 接到 toggle_flip",
   /elif cmd == 24:/.test(pet) && /self\.toggle_flip\(\)\s*#/.test(pet));
 // ⚠️ 2026-09-29：全局热键 H 会让主人速写时打字打不出 H，整条链路删干净，只留右键菜单。
-ok("没有全局热键：热键常量 / 注册调用 / WM_HOTKEY 分支全没了",
-  !/WM_HOTKEY\s*=/.test(pet) && !/VK_H\s*=/.test(pet) &&
-  !/HOTKEY_FLIP_ID/.test(pet) && !/MOD_NOREPEAT\s*=/.test(pet) &&
-  !/user32\.RegisterHotKey/.test(pet) && !/msg == WM_HOTKEY/.test(pet));
+// 🔴 翻转的 H 键必须永远是自由的（以前打字打不出 H）。
+//    ~ / Ctrl+1 是后来按主人要求加的，但**只在参考图模式里注册**，见下面那组断言。
+ok("翻转热键 H 那一套全没了（常量 / ID / 注册调用）",
+  !/VK_H\s*=/.test(pet) && !/HOTKEY_FLIP_ID/.test(pet) &&
+  !/_register_flip_hotkey|_unregister_flip_hotkey/.test(pet));
+ok("热键只剩 ~ / Ctrl+1 两个（没有别的键被占）",
+  (pet.match(/user32\.RegisterHotKey\(self\.hwnd/g) || []).length === 3);
 ok("没有 _register_flip_hotkey / _unregister_flip_hotkey / _hk_registered 残留",
   !/_register_flip_hotkey|_unregister_flip_hotkey|_hk_registered/.test(pet));
 ok("菜单文案里不再带（H）提示", !/（H）/.test(pet));
@@ -1097,7 +1201,7 @@ ok("滚轮缩放以鼠标为中心（pure_zoom_step 收下鼠标坐标）",
   /def pure_zoom_step\(self, sign, mx=None, my=None\)/.test(pet) &&
   /self\.pure_zoom_step\(1 if delta > 0 else -1, mx, my\)/.test(pet));
 ok("_apply_pure_zoom 支持 anchor 锚点（并把左上角换算回中心）",
-  /def _apply_pure_zoom\(self, keep_center="cur", anchor=None\)/.test(pet) &&
+  /def _apply_pure_zoom\(self, keep_center="cur", anchor=None, pos=None\)/.test(pet) &&
   /if anchor and self\._w and self\._h:/.test(pet) &&
   /cx = int\(round\(mx - rx \* w \+ w \/ 2\.0\)\)/.test(pet));
 ok("鼠标坐标从 WM_MOUSEWHEEL 的 lparam 取（c_short：副屏负坐标也对）",
@@ -1121,7 +1225,7 @@ ok("有 back_to_pure：把刚才那张图的大窗唤回来",
   /def back_to_pure\(self\)/.test(pet) && /self\._display_src = src/.test(pet) &&
   /ok = self\.enter_pure\(\)/.test(pet));
 ok("进模式时记住那张图（_last_pure_src）",
-  /self\._last_pure_src = self\._display_src/.test(pet) &&
+  /self\._last_pure_src = src/.test(pet) &&
   /self\._last_pure_src = None/.test(pet));
 ok("没有图时不会硬进（小兔会提示先上传）",
   /还没.*参考图|还没有参考图/.test(pet) && /返回参考图模式：手上没有可参考的图/.test(pet));
@@ -1150,7 +1254,7 @@ ok("request_pure_quit 先关大图并唤回主界面",
 ok("倒计时心跳响应带回 quit 信号",
   /cmd == "timer"[\s\S]{0,700}"quit": pure_quit_active\(\)/.test(pet));
 ok("网页收到 quit 就执行 finish（等同点结束）",
-  /if \(j && j\.quit\) pureRemoteQuit\(\)/.test(html) &&
+  /if \(j\.quit\) pureRemoteQuit\(\);/.test(html) &&
   /function pureRemoteQuit\(\)[\s\S]{0,200}finish\(\);/.test(html));
 ok("新一组开始时清掉上一次的退出信号",
   /clear_pure_quit\(\)\s*# 新的一组/.test(pet) && html.includes("_pureQuitDone = false"));
@@ -1276,9 +1380,22 @@ ok("放大超出后可以按住拖动看（不会把图拖离框）",
 ok("双击图复位到 100%",
   /addEventListener\("dblclick"[\s\S]{0,240}webZoomReset\(el\)/.test(html));
 ok("换图时缩放复位到 100%", /webZoomReset\(\$\("welcome-img-el"\)\)/.test(html));
-ok("有全屏看图按钮 + 全屏层（Esc / ✕ / 点空白处退出）",
+ok("有全屏看图按钮 + 全屏层（Esc / 再点那个按钮 / 点空白处退出）",
   /id="fs-btn"/.test(html) && /id="img-fs"/.test(html) &&
-  /id="img-fs-close"/.test(html) && /e\.key === "Escape"/.test(html));
+  /e\.key === "Escape"/.test(html));
+// 🔴 只有这一个按钮：进/出全屏都用它，位置大小一律不变（UI 不跳）——
+//    所以**不能再有**第二个关闭按钮 #img-fs-close（2026-09-30 DQ 要求）。
+ok("没有第二个关闭按钮（进出全屏是同一个按钮原地变 ✕）",
+  !/id="img-fs-close"/.test(html) && !/#img-fs-close/.test(html));
+ok("打开全屏：按钮原地变 ✕ + 给 body 打 fs-open",
+  /function openImgFs\(src\)[\s\S]{0,400}classList\.add\("fs-open"\)[\s\S]{0,200}textContent = "✕"/.test(html));
+ok("退出全屏：按钮变回 ⛶ + 撤掉 fs-open",
+  /function closeImgFs\(\)[\s\S]{0,300}classList\.remove\("fs-open"\)[\s\S]{0,200}textContent = "⛶"/.test(html));
+ok("同一个按钮：开着就关、没开就开",
+  /addEventListener\("click"[\s\S]{0,220}if \(!\$\("img-fs"\)\.hidden\) \{ closeImgFs\(\); return; \}/.test(html));
+ok("按钮要抬到全屏层（999）上面才点得到",
+  /body\.fs-open #fs-btn \{ z-index: 1000; \}/.test(css) &&
+  /#img-fs \{[\s\S]{0,200}z-index: 999;/.test(css));
 // 按钮要一直看得见：主色实心圆 + 白图标，尺寸 45px（原 30px 的 150%）
 ok("全屏按钮默认就清楚显示（没有 opacity:0 / 悬停才出现）",
   /#fs-btn \{[\s\S]{0,420}?\}/.test(html) &&
@@ -1289,9 +1406,26 @@ ok("全屏按钮用主色填充 + 白图标",
 ok("全屏按钮比原来放大 150%（45px，字号 22px）",
   /#fs-btn \{[\s\S]{0,420}?width: 45px; height: 45px/.test(html) &&
   /#fs-btn \{[\s\S]{0,420}?font-size: 22px/.test(html));
-ok("全屏按钮挂到有图的那个框上（换图重画后会重新挂）",
-  /function mountFsBtn/.test(html) && /mountFsBtn\(\$\("prompt-box"\)\)/.test(html) &&
-  /mountFsBtn\(\$\("welcome-img"\)\)/.test(html));
+// 位置：钉在卡片内容区右上角（top/right = 卡片那圈 padding 28px）
+// → 正好和「第 X / N 张」进度胶囊**上边齐平**（两者都在内容区第 0 行）
+ok("全屏按钮钉在卡片内容区右上角（top/right: 28px）",
+  /#fs-btn \{[\s\S]{0,200}top: 28px; right: 28px/.test(css));
+ok("卡片是定位基准（#screen-practice / #screen-welcome 都 position: relative）",
+  /#screen-practice \{[\s\S]{0,220}position: relative/.test(css) &&
+  /#screen-welcome \{[\s\S]{0,220}position: relative/.test(css));
+ok("按钮挂到「当前这一屏的卡片」上（不是图框里）",
+  /function mountFsBtn\(stage\)/.test(html) && /function syncFsBtn\(\)/.test(html) &&
+  /stage\.appendChild\(b\)/.test(html));
+ok("showScreen / renderPrompt / setWelcomeHero 都会刷一遍按钮挂哪",
+  /function showScreen\(name\)[\s\S]{0,400}syncFsBtn\(\)/.test(html) &&
+  /function renderPrompt\(\)[\s\S]{0,600}syncFsBtn\(\)/.test(html) &&
+  /function setWelcomeHero\(showRef\)[\s\S]{0,400}syncFsBtn\(\)/.test(html));
+ok("这一屏没图就把按钮藏起来（不再孤零零飘在右上角）",
+  /function mountFsBtn\(stage\)[\s\S]{0,300}if \(!fsImgOf\(stage\)\) \{ b\.hidden = true; return; \}/.test(html));
+ok("按钮初始就是 hidden（还没选图时不飘出来）",
+  /<button type="button" id="fs-btn" title="全屏看图" hidden>/.test(html));
+ok("换屏时先把全屏层收掉（否则按钮会被挪走 → 全屏里 UI 跳）",
+  /function showScreen\(name\)[\s\S]{0,400}if \(!\$\("img-fs"\)\.hidden\) closeImgFs\(\);[\s\S]{0,120}syncFsBtn\(\)/.test(html));
 (function () {
   const box = $("#prompt-box");
   box.innerHTML = '<img src="x.png" alt="参考图">';
@@ -1328,14 +1462,20 @@ ok("全屏按钮挂到有图的那个框上（换图重画后会重新挂）",
   mountFsBtnTest(box);
 })();
 function mountFsBtnTest(box) {
-  // 上面刚重画过 innerHTML，按钮会一起被冲掉 —— 正式代码里 renderPrompt 会重新挂
-  w.mountFsBtn(box);
+  // 上面刚重画过 innerHTML —— 正式代码里 renderPrompt / showScreen 会重新挂（syncFsBtn）
+  w.mountFsBtn($("#screen-practice"));
   const btn = $("#fs-btn");
-  ok("换图重画后全屏按钮会重新挂回图上", btn && btn.parentElement === box,
-    btn ? String(btn.parentElement.id) : "null");
+  ok("全屏按钮挂在『当前这一屏的卡片』里（不是图框里）",
+    btn && btn.parentElement === $("#screen-practice") && btn.hidden === false,
+    btn ? String(btn.parentElement.id) + " hidden=" + btn.hidden : "null");
+  ok("按钮和图框不是同一个父节点（所以不会再被 renderPrompt 冲掉）",
+    btn && btn.parentElement !== box);
   btn.dispatchEvent(new w.MouseEvent("click", { bubbles: true, cancelable: true }));
   const fs = $("#img-fs");
   ok("点 ⛶ 打开全屏看图", fs.hidden === false, String(fs.hidden));
+  ok("打开后：同一个按钮原地变成 ✕，位置/父节点都没变",
+    btn.textContent === "✕" && btn.parentElement === $("#screen-practice") &&
+    w.eval("document.body.classList.contains('fs-open')") === true);
   const fsImg = $("#img-fs-el");
   Object.defineProperty(fsImg, "naturalWidth", { value: 1000, configurable: true });
   Object.defineProperty(fsImg, "naturalHeight", { value: 500, configurable: true });
@@ -1354,8 +1494,11 @@ function mountFsBtnTest(box) {
   ok("全屏里最多放大到 500%", fsImg.dataset.zoom === "5", fsImg.dataset.zoom);
   for (let i = 0; i < 60; i++) fsw(100);
   ok("全屏里最小 50%", fsImg.dataset.zoom === "0.5", fsImg.dataset.zoom);
-  $("#img-fs-close").dispatchEvent(new w.MouseEvent("click", { bubbles: true, cancelable: true }));
-  ok("点 ✕ 退出全屏", fs.hidden === true, String(fs.hidden));
+  // 再点同一个按钮 → 退出（没有第二个关闭按钮）
+  btn.dispatchEvent(new w.MouseEvent("click", { bubbles: true, cancelable: true }));
+  ok("再点同一个 ✕ 退出全屏，按钮变回 ⛶",
+    fs.hidden === true && btn.textContent === "⛶" &&
+    w.eval("document.body.classList.contains('fs-open')") === false);
 }
 
 console.log("\n【版本号：一处改动，网页 + exe 一起跟上】");
@@ -1373,6 +1516,195 @@ ok("网页同步指纹带内容 md5（同尺寸的改动也能被发现）",
   /def _fingerprint\(root\)/.test(pet) && /hashlib\.md5\(\)/.test(pet) &&
   /return "%d_%d_%s" % \(n, size, h\.hexdigest\(\)\)/.test(pet));
 
+console.log("\n【网页点「继续」：直接退出网页 UI 回到参考图模式】");
+ok("有 pureBackOnResume 这个函数", w.eval("typeof pureBackOnResume") === "function");
+ok("点继续（resume 那一支）会试着回参考图模式",
+  /function resumeNow\(stayHere\)[\s\S]{0,400}pureBackOnResume\(\);/.test(html));
+ok("继续时先解除暂停、再回大图（顺序不会把计时弄乱）",
+  /S\.paused = false;[\s\S]{0,200}pureBackOnResume\(\);/.test(html));
+// 把 petPureStart 换成探针：jsdom 里 fetch 是静默失败的，只看它有没有被叫、叫的是哪张图
+w.eval("window.__pure=[]; petPureStart=function(s){ window.__pure.push(s); return true; };");
+w.eval("S.phase='idle'; _pureCurSrc='';");
+ok("没在练的时候点继续：不动界面", w.eval("pureBackOnResume()") === false);
+w.eval("S.phase='draw'; _pureCurSrc='';");
+ok("这一组没用过参考图模式（网页单独玩）：不收界面", w.eval("pureBackOnResume()") === false);
+ok("以上两种情况都没有发起回大图的请求", w.eval("window.__pure.length") === 0);
+w.eval("S.phase='draw'; _pureCurSrc='blob:cur';");
+ok("这一组用过大窗：点继续就直接回参考图模式", w.eval("pureBackOnResume()") === true);
+ok("回的是当前这张参考图（不是空的）",
+  w.eval("window.__pure.length") === 1 && w.eval("typeof window.__pure[0]") === "string"
+  && w.eval("window.__pure[0].length") > 0);
+w.eval("S.phase='idle'; _pureCurSrc='';");
+
+console.log("\n【回到参考图模式：连上次的大小一起还原】");
+const pySrc = fs.readFileSync(path.join(ROOT, "desktop", "xiaotu_pet.py"), "utf8");
+ok("桌面端会记住大图的上一次大小", /PURE_LAST_SIZE = None/.test(pySrc)
+  && /def set_pure_last_size\(w, h\)/.test(pySrc) && /def pure_last_size\(\)/.test(pySrc));
+ok("每次出图都按实际显示的大小记一笔",
+  /set_pure_last_size\(w, h\)/.test(pySrc));
+ok("换图 / 回到大图时沿用上次的**缩放比例**（不是一律 100%）",
+  /z = pure_last_zoom\(\)/.test(pySrc) && /min\(self\.PURE_ZOOM_MAX, z\)\) if z else 1\.0/.test(pySrc));
+ok("缩放倍率仍夹在 50%~200% 之间", /max\(self\.PURE_ZOOM_MIN,[\s\S]{0,120}min\(self\.PURE_ZOOM_MAX,/.test(pySrc));
+ok("位置和大小分开记：滚轮缩放不改位置，只改大小",
+  pySrc.indexOf("set_pure_last_size(w, h)") > 0 && !/set_pure_last_pos\(self\.x, self\.y\)\s*#\s*缩放/.test(pySrc));
+ok("网页端回大图时没现成图源也能靠记住的那张图回去",
+  /src = self\._display_src or self\._last_pure_src/.test(pySrc));
+
+console.log("\n【参考图模式：跳过这张图 / ~ 暂停 / 悬停提示】");
+ok("大图右键多了「跳过这张图」（命令 26）",
+  /if self\.kind == "pure":[\s\S]{0,400}AppendMenuW\(hmenu, MF_STRING, 26, "跳过这张图/.test(pySrc));
+ok("右下角桌宠右键也有「跳过这张图」",
+  /if self\.in_session\(\):\s*user32\.AppendMenuW\(hmenu, MF_STRING, 26, "跳过这张图/.test(pySrc));
+ok("菜单上标了默认快捷键 Ctrl+1", pySrc.includes('"跳过这张图\\tCtrl+1"'));
+ok("只有这一组还在练才显示跳过（靠网页心跳判断）",
+  /def in_session\(self\)/.test(pySrc) && /time\.time\(\) - self\._timer_at\) < 3\.0/.test(pySrc));
+ok("桌面端只置信号，换图由网页来（不会自己乱跳）",
+  /def request_pure_skip\(\)/.test(pySrc) && /PURE_SKIP_REQ = True/.test(pySrc));
+ok("心跳把 skip 带回去，取一次就清掉",
+  /"skip": take_pure_skip\(\)/.test(pySrc));
+ok("pause 传的是**目标状态**（1=暂停 / 0=继续），不是「切换一下」",
+  /resp\["pause"\] = 1 if want else 0/.test(pySrc)
+  && /def request_pure_pause\(want\)/.test(pySrc));
+ok("~ 是暂停/继续的切换（VK_OEM_3，Shift+~ 也认）",
+  /VK_OEM_3 = 0xC0/.test(pySrc) && /HOTKEY_PAUSE_SHIFT_ID = 0x51B2/.test(pySrc));
+ok("Ctrl+1 跳过这张图", /VK_1 = 0x31/.test(pySrc) && /HOTKEY_SKIP_ID = 0x51B3/.test(pySrc));
+ok("🔴 两个快捷键只在参考图模式注册，退出立刻注销（H 的教训）",
+  /def _register_pure_hotkeys\(self\)/.test(pySrc) && /def _unregister_pure_hotkeys\(self\)/.test(pySrc)
+  && /exit_pure[\s\S]{0,600}_unregister_pure_hotkeys\(\)/.test(pySrc));
+ok("🔴 翻转热键 H 依然没有回来", !/VK_H|HOTKEY_FLIP_ID/.test(pySrc));
+ok("悬停 0.3 秒才浮出操作提示", /PURE_HINT_DELAY = 0\.3/.test(pySrc)
+  && /self\._hint_deadline = time\.time\(\) \+ PURE_HINT_DELAY/.test(pySrc));
+ok("提示写清了三件事：滚轮缩放 / Ctrl+1 跳过 / ~ 暂停",
+  /滚轮[\s\S]{0,40}缩放图片大小/.test(pySrc) && /Ctrl\+1：跳过这张图/.test(pySrc)
+  && /~：暂停速写/.test(pySrc));
+ok("提示画在大图上、几秒后自己收起来",
+  /def _draw_pure_hint\(self, canvas\)/.test(pySrc) && /PURE_HINT_SECS = 4\.0/.test(pySrc));
+ok("图太小时不硬挤提示（不挡参考图）", /if W < bw \+ 2 \* pad or H < bh \+ 2 \* pad:/.test(pySrc));
+
+console.log("\n【网页端：接住桌面端的跳过 / 暂停】");
+ok("有 petRemoteSkip / pauseNow / resumeNow / togglePause",
+  w.eval("typeof petRemoteSkip") === "function" && w.eval("typeof pauseNow") === "function"
+  && w.eval("typeof resumeNow") === "function" && w.eval("typeof togglePause") === "function");
+ok("心跳响应里的 skip → 跳下一张", /if \(j\.skip\) petRemoteSkip\(\);/.test(html));
+ok("心跳响应里的 pause=1 → 暂停 / pause=0 → 继续（按目标状态，不会两边错开）",
+  /if \(j\.pause === 1\) pauseNow\(\);/.test(html) && /else if \(j\.pause === 0\) resumeNow\(\);/.test(html));
+ok("没在练的时候这两个信号都不理", /if \(S\.phase === "idle"\) return;/.test(html));
+ok("暂停 / 继续各自都是幂等的（重复收到同一个状态不会乱切）",
+  /function pauseNow\(\) \{\s*if \(S\.phase === "idle" \|\| S\.paused\) return;/.test(html)
+  && /function resumeNow\(stayHere\) \{\s*if \(S\.phase === "idle" \|\| !S\.paused\) return;/.test(html));
+ok("暂停按钮和 ~ 键共用同一套暂停逻辑",
+  /\$\("btn-pause"\)\.addEventListener\("click", togglePause\)/.test(html));
+ok("继续时把剩下的时间接回去（回到暂停前的计时）",
+  /S\.paused = false; S\.endAt = Date\.now\(\) \+ S\.remaining \* 1000;/.test(html));
+ok("暂停时小兔头顶的数字也定住，不会自己往下跑",
+  /if \(S\.paused && S\.timing !== "none"\)[\s\S]{0,160}label = "已暂停"/.test(html));
+w.eval("S.phase='draw'; S.timing='down'; S.paused=false; S.remaining=42;");
+w.eval("togglePause()");
+ok("~ 暂停：按钮变成「继续并切换到参考图模式」，剩余时间冻住",
+  w.eval("S.paused") === true && $("#btn-pause").textContent === "继续并切换到参考图模式");
+w.eval("S.endAt = Date.now() + 1000; togglePause();");
+ok("再按一次继续：剩余时间接回去（还是那 42 秒）",
+  w.eval("S.paused") === false && Math.abs(w.eval("S.endAt") - Date.now() - 42000) < 1500);
+w.eval("S.phase='idle'; S.paused=false;");
+
+console.log("\n【暂停后的按钮排：继续 = 主推，跳过 = 普通】");
+ok("有 RESUME_TEXT，文案就是「继续并切换到参考图模式」",
+  /const RESUME_TEXT = "继续并切换到参考图模式";/.test(html));
+ok("暂停 → 继续按钮升成主推（加 resume-main / 去掉 ghost）",
+  /p\.classList\.toggle\("resume-main", S\.paused\);/.test(html)
+  && /p\.classList\.toggle\("ghost", !S\.paused\);/.test(html));
+ok("暂停 → 跳过按钮退回普通色调（去掉 purple / 加 ghost）",
+  /s\.classList\.toggle\("purple", !S\.paused\);/.test(html)
+  && /s\.classList\.toggle\("ghost", S\.paused\);/.test(html));
+ok("继续 → 文案与两颗按钮的色调都还原（同一个 syncPauseBtn 管来回）",
+  /function resumeNow\(stayHere\)[\s\S]{0,260}syncPauseBtn\(\);/.test(html));
+ok("CSS：继续按钮放大一档（padding 16px 32px / 字号 17px）",
+  /\.ctrls \.btn\.resume-main \{[\s\S]{0,220}padding: 16px 32px; font-size: 17px;/.test(html));
+ok("CSS：继续按钮是主色实心 var(--pink)",
+  /\.ctrls \.btn\.resume-main \{[\s\S]{0,280}background: var\(--pink\); color: #fff;/.test(html));
+ok("窄窗口也保住「继续」比旁边大（≤1120px 媒体查询里有兜底）",
+  /@media \(max-width: 1120px\)[\s\S]{0,400}#screen-practice \.ctrls \.btn\.resume-main/.test(html));
+ok("新的一段开始时按钮排归位（上一轮暂停的样子不会留着）",
+  /function startPhase\(phase, seconds\) \{[\s\S]{0,240}syncPauseBtn\(\);/.test(html));
+w.eval("S.phase='draw'; S.timing='down'; S.paused=false; S.remaining=42;");
+$("#btn-pause").className = "btn ghost"; $("#btn-skip").className = "btn purple";
+w.eval("pauseNow()");
+ok("运行时暂停：继续 = 主色实心放大，跳过 = 普通色调",
+  $("#btn-pause").textContent === "继续并切换到参考图模式"
+  && $("#btn-pause").classList.contains("resume-main") && !$("#btn-pause").classList.contains("ghost")
+  && $("#btn-skip").classList.contains("ghost") && !$("#btn-skip").classList.contains("purple"));
+w.eval("resumeNow()");
+ok("运行时继续：两颗按钮都回到原来的样子",
+  $("#btn-pause").textContent === "暂停"
+  && !$("#btn-pause").classList.contains("resume-main") && $("#btn-pause").classList.contains("ghost")
+  && $("#btn-skip").classList.contains("purple") && !$("#btn-skip").classList.contains("ghost"));
+w.eval("S.phase='idle'; S.paused=false;");
+
+console.log("\n【暂停时左边那颗：继续并呆在这个页面】");
+ok("按钮就在「继续并切换到参考图模式」左边，且默认藏着",
+  /<button class="btn ghost" id="btn-resume-stay" hidden>继续并呆在这个页面<\/button>[\s\S]{0,120}id="btn-pause"/.test(html));
+ok("有 RESUME_STAY_TEXT，文案就是「继续并呆在这个页面」",
+  /const RESUME_STAY_TEXT = "继续并呆在这个页面";/.test(html));
+ok("只有暂停时才露出来（平常它点了没事干）",
+  /if \(st\) st\.hidden = !S\.paused;/.test(html));
+ok("点它是 resumeNow(true)：只解除暂停、留在本页",
+  /\$\("btn-resume-stay"\)\.addEventListener\("click", \(\) => resumeNow\(true\)\)/.test(html));
+ok("resumeNow(true) 不会去切参考图模式（切模式那句被 stayHere 挡住）",
+  /if \(!stayHere\) pureBackOnResume\(\);/.test(html));
+ok("给这一屏挂 .paused（窄窗口 CSS 只收窄暂停时这一排）",
+  /scr\.classList\.toggle\("paused", !!S\.paused\);/.test(html));
+ok("CSS：≤1250px 收窄暂停排（三颗按钮 + 「继续」那一颗都收）",
+  /@media \(max-width: 1250px\) \{\s*#screen-practice\.paused \.ctrls \{ gap: 8px; \}[\s\S]{0,220}#screen-practice\.paused \.ctrls \.btn\.resume-main/.test(html));
+ok("CSS：≤1120px 再收一档（1024 左右窗口 4 颗按钮仍是一行）",
+  /@media \(max-width: 1120px\) \{\s*#screen-practice\.paused \.ctrls \{ gap: 6px; \}[\s\S]{0,260}#btn-resume-stay \{ font-size: 13px; \}/.test(html));
+ok("CSS：这些收窄只认 .paused，平常那三颗按钮一点没动",
+  /#screen-practice\.paused \.ctrls \.btn \{ min-width: 92px; padding: 12px 14px; \}/.test(html)
+  && /\.ctrls \.btn \{[^}]*min-width: 130px; padding: 12px 26px;/.test(html));
+
+// 运行时：暂停 → 新按钮露出来；点它留在本页；普通「继续」照旧回参考图模式
+w.eval("var _pbrOrig = pureBackOnResume, _pbrCalls = 0; pureBackOnResume = function () { _pbrCalls++; };");
+w.eval("S.phase='draw'; S.timing='down'; S.paused=false; S.remaining=42; showScreen('practice'); pauseNow();");
+ok("暂停后新按钮露出来了",
+  $("#btn-resume-stay").hidden === false && $("#btn-resume-stay").textContent === "继续并呆在这个页面");
+ok("暂停后这一屏带上 .paused（窄屏 CSS 靠它选中）",
+  $("#screen-practice").classList.contains("paused"));
+w.eval("resumeNow(true)");
+ok("点「继续并呆在这个页面」：解除暂停、不切参考图模式、按钮又藏回去",
+  w.eval("S.paused") === false && w.eval("_pbrCalls") === 0
+  && $("#btn-resume-stay").hidden === true && !$("#screen-practice").classList.contains("paused"));
+w.eval("pauseNow(); resumeNow();");
+ok("普通「继续」（网页那颗 / 桌面 ~ 键）照旧回参考图模式",
+  w.eval("_pbrCalls") === 1 && w.eval("S.paused") === false);
+w.eval("pureBackOnResume = _pbrOrig; S.phase='idle'; S.paused=false; syncPauseBtn();");
+
+console.log("\n【~ 暂停：小兔立刻停 + 大图蒙版 + 恢复时 3 2 1】");
+ok("按 ~ 时桌面端**立刻**把倒计时冻住（不等网页那一下心跳）",
+  /if self\._pause_hold:[\s\S]{0,140}left = self\.timer_left[\s\S]{0,60}label = "已暂停"/.test(pySrc));
+ok("大图蒙 30% 黑（76 ≈ 0.3×255）", /PURE_PAUSE_VEIL = 76/.test(pySrc)
+  && /Image\.new\("RGBA", \(W, H\), \(0, 0, 0, PURE_PAUSE_VEIL\)\)/.test(pySrc));
+ok("正中写「暂停中」+ 小字「按键盘 \"~\" 键继续」",
+  /PURE_PAUSE_TITLE = "暂停中"/.test(pySrc) && /按键盘 "~" 键继续/.test(pySrc));
+ok("恢复时先显示「继续速写」", /PURE_RESUME_TITLE = "继续速写"/.test(pySrc));
+ok("再播 3 → 2 → 1", /self\._resume_step = 3/.test(pySrc) && /self\._resume_step -= 1/.test(pySrc));
+ok("倒数播完才让网页接着计时（不是一按就放）",
+  /set_pause_hold\(False\)[\s\S]{0,120}request_pure_pause\(False\)/.test(pySrc));
+ok("大图没在显示就不播动画，直接继续",
+  /if not self\.hwnd or not self\.visible:\s*return False/.test(pySrc));
+ok("倒数到一半又按 ~：停掉动画回到暂停，不会状态打架",
+  /def cancel_resume\(self\)/.test(pySrc) && /pw\.cancel_resume\(\)/.test(pySrc));
+ok("字后面垫了半透明板（不管参考图明暗都看得清）",
+  /box = \(0, 0, 0, 128\)/.test(pySrc)                 // 50% 透明黑
+  && /draw\.rounded_rectangle\(\[tx0, top, tx0 \+ t_bw, top \+ t_bh\]/.test(pySrc)
+  && /draw\.rounded_rectangle\(\[sx0, sy0, sx0 \+ s_bw, sy0 \+ s_bh\]/.test(pySrc));
+ok("底板和文字对齐：文字按 textbbox 偏移落笔，不会「字和黑框歪了」",
+  /draw\.text\(\(tx0 \+ pad_t - tbb\[0\], top \+ pad_t - tbb\[1\]\), title/.test(pySrc)
+  && /draw\.text\(\(sx0 \+ pad_s - sbb\[0\], sy0 \+ pad_s - sbb\[1\]\), sub/.test(pySrc)
+  && /fill=\(255, 255, 255, 255\)/.test(pySrc));
+ok("小兔右键菜单一直有「暂停 / 继续」（这一组在计时就有，不管当前是不是暂停）",
+  /if self\.in_session\(\):[\s\S]{0,300}AppendMenuW\(hmenu, MF_STRING, 27,/.test(pySrc)
+  && /"继续速写\\t~" if self\._pause_hold else "暂停速写\\t~"/.test(pySrc));
+ok("菜单这一项和 ~ 键走同一套逻辑", /cmd == 27[\s\S]{0,120}self\.toggle_pause\(\)/.test(pySrc));
+
 console.log("\n【更新记录 CHANGELOG.md】");
 const clPath = path.join(ROOT, "CHANGELOG.md");
 ok("存在 CHANGELOG.md 更新记录文件", fs.existsSync(clPath));
@@ -1388,6 +1720,17 @@ ok("版本倒序：当前版本排在最前",
   cl.indexOf("## [V0.2]") < cl.indexOf("## [V0.1]"));
 ok("打包脚本会在完成后打开更新记录",
   fs.readFileSync(path.join(ROOT, "tools", "build-exe.py"), "utf8").includes("CHANGELOG.md"));
+// 2026-09-30 踩：read_version() 以前正则 `<span class="ver">`，可那个 span 带 id="app-ver"
+// → 永远匹配不到 → 静默兜底 V0.2 → 打包完打印的是上一个版本的更新记录。
+// 现在统一读 APP_VER（和网页侧栏、exe 分享卡片同一个来源）。
+{
+  const bs = fs.readFileSync(path.join(ROOT, "tools", "build-exe.py"), "utf8");
+  ok("打包脚本从 APP_VER 读版本号（不再正则侧栏那个带 id 的 span）",
+    bs.includes('APP_VER\\s*=\\s*"([^"]+)"') &&
+    !/re\.search\(r'<span class="ver">/.test(bs));
+  ok("侧栏那个 span 带 id（read_version 不能写死整个开标签）",
+    /<span class="ver" id="app-ver">/.test(html));
+}
 
 console.log("\n结果：" + pass + " 通过 / " + fail + " 失败");
 process.exit(fail ? 1 : 0);

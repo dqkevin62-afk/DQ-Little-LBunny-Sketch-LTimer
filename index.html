@@ -309,7 +309,7 @@
   .ring-wrap.timer-off .ring-time .t { font-size: 38px; }
   .prompt-box {
     min-height: 160px; border-radius: 18px;
-    background: linear-gradient(150deg, var(--pink-soft) 0%, var(--purple-soft) 100%);
+    /* 不放底色：参考图直接落在白色卡片上，画面干净、少一层色块（2026-09-30 DQ 要求） */
     display: flex; align-items: center; justify-content: center;
     padding: 24px; margin-bottom: 20px;
     /* ⚠️ 缩放走 transform：框的尺寸永远是「100% 时」那个尺寸，放大后图直接超出框
@@ -318,14 +318,84 @@
   }
   .prompt-box .cat { font-size: 13px; color: var(--purple); display: block; margin-bottom: 8px; }
   .prompt-box .txt { font-size: 20px; line-height: 1.7; font-weight: 500; }
-  .prompt-box img { max-width: 100%; max-height: 55vh; border-radius: 10px; margin: auto; }
+  /* 图真正的「画布」：绝对定位撑满方框内圈（公共样式见下面 .shot 那条规则）。
+     为什么要这一层：图片的 max-height:100% 需要一个**确定高度**的父级才生效，
+     而 flex 拉伸出来的高度在浏览器里算「不确定」，直接写 max-height:100% 会失效
+     （图按原始尺寸渲染 → 超框被裁）。绝对定位 + 四边偏移给出确定高度，图就能
+     「尽量大又不超框」。缩放/拖动仍然作用在 img 上，量出来的框正好是这一层。
+     练习页的方框留 18px 内圈，比欢迎页稍宽一点（方框本身不铺底色）。 */
+  .prompt-box .shot { top: 18px; left: 18px; right: 18px; bottom: 18px; }
+  .prompt-box img { max-width: 100%; max-height: 100%; border-radius: 10px; margin: auto; }
+  /* ---------- 练习页布局：参考图占满中间整块 / 按钮（含倒计时）横排一行常显 ---------- */
+  /* 卡片高度 = 视口可用高度（#main 上下各 32px 内边距）→「进度 / 图 / 按钮」三行都在屏内，
+     默认不用滚动就能看到全部按钮（以前计时环占 260px 高，按钮被顶到屏幕外）。 */
+  #screen-practice {
+    max-width: 1200px; height: calc(100vh - 64px); min-height: 460px;
+    display: flex; flex-direction: column;
+    position: relative;   /* #fs-btn 的定位基准：卡片内容区右上角（和「第 X / N 张」齐平） */
+  }
+  .practice-body { display: flex; flex: 1; min-height: 0; }
+  #screen-practice .prompt-box { flex: 1; min-width: 0; margin-bottom: 0; }
+  /* 倒计时：跟按钮一样大小的一枚小圆环，排在按钮排最前面。
+     靠「一圈描边」跟实心按钮区分开（进度环本身当描边），中间只显示数字。 */
+  .mini-timer { flex: 0 0 auto; width: 46px; height: 46px; }
+  .mini-timer .ring-wrap { width: 46px; height: 46px; margin: 0; }
+  .mini-timer .ring-wrap svg { width: 100%; height: 100%; }
+  .mini-timer circle { stroke-width: 16; }            /* viewBox 是 260 → 显示出来约 2.8px 的细描边 */
+  .mini-timer .ring-time .t { font-size: 16px; }
+  .mini-timer .ring-time .t.long { font-size: 12px; } /* 超过 100 秒会显示 m:ss，字号收一号才不顶边 */
+  .mini-timer .ring-time .p { display: none; }        /* 中间只留数字，不显示「绘制中」 */
+  /* 不计时（自由练习）：没有倒计时可看，整枚小圆环就不占地方
+     （万一浏览器不认 :has，下面那条兜底把文字收小，也不会顶到旁边的按钮） */
+  .mini-timer:has(.ring-wrap.timer-off) { display: none; }
+  .mini-timer .ring-wrap.timer-off .ring-time .t { font-size: 12px; }
+  #screen-practice .ctrls { margin-top: 16px; }
+  /* 窗口比较窄：按钮收窄一点，保证「小圆环 + 三颗按钮」始终是一行不折行
+     （一折行就会像老版本那样上下堆叠、把最下面那颗顶出屏幕） */
+  @media (max-width: 1120px) {
+    #screen-practice .ctrls { gap: 8px; }
+    #screen-practice .ctrls .btn { min-width: 92px; padding: 12px 14px; }
+    /* 「继续」那颗照旧要比旁边两颗大一号（上面那条会把所有按钮一起收窄） */
+    #screen-practice .ctrls .btn.resume-main { padding: 14px 22px; font-size: 16px; }
+  }
+  /* 暂停态比平常多一颗「继续并呆在这个页面」（小圆环 + 4 颗按钮），本来就宽，
+     窗口不够宽时**只把暂停时的这一排收窄**，平常那三颗按钮一点不动。
+     （靠 syncPauseBtn 给 #screen-practice 挂的 .paused 选中） */
+  @media (max-width: 1250px) {
+    #screen-practice.paused .ctrls { gap: 8px; }
+    #screen-practice.paused .ctrls .btn { min-width: 92px; padding: 12px 14px; }
+    #screen-practice.paused .ctrls .btn.resume-main { padding: 14px 22px; font-size: 16px; }
+  }
+  /* 再窄一档（1024 左右的窗口）：暂停这一排再收一点，「继续」照旧比左右都大 */
+  @media (max-width: 1120px) {
+    #screen-practice.paused .ctrls { gap: 6px; }
+    #screen-practice.paused .ctrls .btn { min-width: 72px; padding: 12px 10px; }
+    #screen-practice.paused .ctrls #btn-resume-stay { font-size: 13px; }
+    #screen-practice.paused .ctrls .btn.resume-main { padding: 13px 16px; font-size: 14px; }
+  }
+  /* 窄屏（侧栏已改成上下堆叠）：卡片不再锁死视口高度，改用比例给图留位置 */
+  @media (max-width: 860px) {
+    #screen-practice { height: auto; min-height: 0; }
+    #screen-practice .prompt-box { min-height: 46vh; }
+  }
   /* 进度条：参考图里的胶囊小标签质感 */
   .progress-line {
     display: block; width: fit-content; margin: 0 auto 16px;
     font-size: 13px; color: var(--pink); font-weight: 500;
     background: var(--pink-soft); border-radius: 999px; padding: 6px 18px;
   }
-  .ctrls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .ctrls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  /* 三颗按钮必须横排成一行：.btn 全局是「display:block; width:100%」（侧栏要的就是那样），
+     放到练习页里会被撑成整宽 → 一颗占一行、纵向堆到屏幕外（点不到「结束」）。
+     这里改回等宽胶囊横排，一行只占 ~46px 高，尽量不抢图片的地方。 */
+  .ctrls .btn { display: inline-block; width: auto; min-width: 130px; padding: 12px 26px; }
+  /* 暂停后「继续」升成这一排的主推按钮：主色实心 + 放大一档，
+     「跳过」同时退回普通色调 —— 两颗都实心会互相抢注意力（2026-09-30 DQ 定） */
+  .ctrls .btn.resume-main {
+    padding: 16px 32px; font-size: 17px; font-weight: 700;
+    background: var(--pink); color: #fff;
+    box-shadow: 0 6px 18px rgba(104, 76, 158, .32);
+  }
   .rest-note { color: var(--purple); font-weight: 600; }
   #screen-summary .stat-grid .num { font-size: 52px; }
   #screen-summary .stat-grid { margin: 8px 0 4px; }
@@ -478,12 +548,39 @@
   #sidebar .bars { height: 66px; margin-top: 9px; }
   #sidebar footer { margin-top: 2px; }
   @media (max-width: 860px) { #screen-guide { padding: 20px 16px 24px; } }
+  /* 图 / 参考图的「画布」层：绝对定位撑满内圈 —— 图片的 max-height:100% 需要一个
+     **确定高度**的父级才生效，而 flex 拉伸出来的高度浏览器算「不确定」，直接写会失效
+     （图按原始尺寸渲染 → 超框被裁）。缩放 / 拖动仍然作用在 img 上，量出来的框就是这一层。 */
+  .shot {
+    position: absolute; top: 14px; left: 14px; right: 14px; bottom: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
   #welcome-img { text-align: center; margin-bottom: 20px; position: relative; overflow: hidden; }
-  #welcome-img img { max-width: 100%; max-height: 42vh; border-radius: 12px; border: 1px solid var(--line); }
+  #welcome-img img { max-width: 100%; max-height: 100%; border-radius: 12px; border: 1px solid var(--line); }
+  /* ---------- 欢迎页布局：参考图占满中间、按钮留在底部整条横栏里居中 ---------- */
+  /* 卡片高度 = 视口可用高度（#main 上下内边距 32px）；justify-content:center 让
+     「还没选图」时的吉祥物 + 文案照旧居中，选了图则由 flex:1 的图吃掉全部剩余空间。 */
+  #screen-welcome {
+    max-width: 1200px; height: calc(100vh - 64px); min-height: 460px;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative;   /* 同上：全屏按钮挂在这一屏，基准是卡片内容区右上角 */
+  }
+  #screen-welcome #welcome-img { flex: 1; min-height: 0; }
+  /* 下方整条横栏（占满宽度、按钮居中）：参考图在屏上 / 侧栏收起时才出现 */
+  .welcome-bar {
+    display: flex; justify-content: center; align-items: center;
+    margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line);
+  }
+  /* 没有任何「开始练习」入口时（没参考图 + 侧栏展开），整条栏也不占地方 */
+  body:not(.sb-collapsed) #welcome-img[hidden] ~ .welcome-bar { display: none; }
   /* 图上右上角那个「全屏看图」按钮：**一直清楚显示**（不用悬停才出现），
-     主色实心圆 + 白图标（和 .btn / .chip.on 一个写法），比原来放大 150%（30 → 45px）。 */
+     主色实心圆 + 白图标（和 .btn / .chip.on 一个写法），比原来放大 150%（30 → 45px）。
+     🔴 钉在**卡片内容区**的右上角：top/right 都是 28px = 卡片那圈 padding，
+     正好和「第 X / N 张」进度胶囊**上边齐平**（两者都在内容区第 0 行）。
+     🔴 全屏看图**没有第二个关闭按钮**：点开全屏后就是这个按钮**原地变成 ✕**
+     —— 位置、大小、样式一律不变，所以 UI 不会到处跳。 */
   #fs-btn {
-    position: absolute; top: 10px; right: 10px; z-index: 6;
+    position: absolute; top: 28px; right: 28px; z-index: 6;
     width: 45px; height: 45px; border-radius: 50%;
     border: none; background: var(--pink); color: #fff;
     font-size: 22px; line-height: 1; cursor: pointer;
@@ -491,6 +588,9 @@
     transition: opacity .15s;
   }
   #fs-btn:hover { opacity: .88; }
+  /* 全屏层是 position:fixed + z-index:999（见下面 #img-fs），
+     按钮必须浮在它上面才点得到 —— 位置一点不动，只是层叠顺序抬上去。 */
+  body.fs-open #fs-btn { z-index: 1000; }
   /* 全屏看图 */
   #img-fs {
     position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 999;
@@ -501,12 +601,6 @@
   #img-fs img {
     max-width: 100%; max-height: 100%; border-radius: 8px;
     cursor: grab; user-select: none; -webkit-user-drag: none;
-  }
-  #img-fs-close {
-    position: absolute; top: 18px; right: 18px; z-index: 3;
-    width: 38px; height: 38px; border-radius: 50%;
-    border: 1px solid var(--line); background: var(--card); color: var(--ink);
-    font-size: 17px; line-height: 1; cursor: pointer;
   }
   #img-fs .fs-tip {
     position: absolute; left: 0; right: 0; bottom: 18px;
@@ -536,14 +630,17 @@
   }
   #sidebar.hidden-sb { display: none; }
   body.sb-collapsed #btn-expand { display: block; }
-  #btn-welcome-start { display: none; width: auto; margin: 24px auto 0; padding: 13px 48px; }
+  #btn-welcome-start { display: none; width: auto; padding: 13px 48px; }
   body.sb-collapsed #btn-welcome-start { display: block; }
   /* 参考图已上屏时，欢迎屏也出现「开始练习」（纯净参考图模式入口） */
-  #welcome-img:not([hidden]) ~ .welcome #btn-welcome-start { display: block; }
+  #welcome-img:not([hidden]) ~ .welcome-bar #btn-welcome-start { display: block; }
   @media (max-width: 860px) {
     #layout { flex-direction: column; }
     #sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--line); }
     #main { padding: 20px 16px; }
+    /* 窄屏（侧栏已上下堆叠）：欢迎页也不再锁死视口高度，改用比例给图留位置 */
+    #screen-welcome { height: auto; min-height: 0; }
+    #screen-welcome #welcome-img { min-height: 42vh; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -554,8 +651,8 @@
   <!-- 左侧菜单栏 -->
   <aside id="sidebar">
     <div class="sb-head">
-      <img class="avatar" src="assets/dq-chibi.png" alt="小兔 Q版形象">
-      <h1>DQ小兔速写计时姬<span class="ver" id="app-ver">V1.2</span></h1>
+      <img class="avatar" src="assets/xiaotu-avatar.png" alt="小兔 头像">
+      <h1>DQ小兔速写计时姬<span class="ver" id="app-ver">V1.5</span></h1>
       <button id="btn-settings" class="chip">收起</button>
     </div>
     <p class="sub">二次元美少女专项 · 每天坚持速写 1~2 小时即可</p>
@@ -658,12 +755,15 @@
   <main id="main">
     <!-- 欢迎页 -->
     <section id="screen-welcome" class="stage">
-      <div id="welcome-img" hidden><img id="welcome-img-el" src="" alt="参考图" draggable="false"></div>
-      <img class="hime-img" src="assets/dq-timer-hime.jpg" alt="小兔 角色形象">
+      <div id="welcome-img" hidden><div class="shot"><img id="welcome-img-el" src="" alt="参考图" draggable="false"></div></div>
+      <img class="hime-img" src="assets/dq-timer-hime.png" alt="小兔 角色形象">
       <p class="hime-name">DQ小兔速写计时姬</p>
       <div class="welcome">
         <div class="big">小兔陪你练速写啦~</div>
         <p>在左侧上传参考图，再选好时长和张数<br>点击「开始练习」，参考图会出现在这里<br>快写热身用 30 秒~1 分钟，深入刻画用 10 分钟以上</p>
+      </div>
+      <!-- 底部整条横栏：按钮居中（参考图在屏上 / 侧栏收起时才出现） -->
+      <div class="welcome-bar">
         <button class="btn" id="btn-welcome-start">开始练习</button>
       </div>
     </section>
@@ -699,21 +799,30 @@
     <!-- 练习页 -->
     <section id="screen-practice" class="stage card" hidden>
       <div class="progress-line" id="prog-line">第 1 / 10 张</div>
-      <div class="prompt-box" id="prompt-box">
-        <div><span class="cat" id="p-cat"></span><span class="txt" id="p-txt"></span></div>
-      </div>
-      <div class="ring-wrap">
-        <svg width="260" height="260">
-          <circle class="ring-track" cx="130" cy="130" r="115" fill="none" stroke-width="10"/>
-          <circle id="ring" cx="130" cy="130" r="115" fill="none"
-                  stroke-width="10" stroke-linecap="round" stroke-dasharray="722.6" stroke-dashoffset="0"/>
-        </svg>
-        <div class="ring-time">
-          <div class="t" id="time-text">60</div>
-          <div class="p" id="phase-text">绘制中</div>
+      <!-- 参考图自己占满中间整块（右侧不再留计时列，图能开得更大） -->
+      <div class="practice-body">
+        <div class="prompt-box" id="prompt-box">
+          <div><span class="cat" id="p-cat"></span><span class="txt" id="p-txt"></span></div>
         </div>
       </div>
       <div class="ctrls">
+        <!-- 倒计时：缩成跟按钮一样大小的一枚小圆环，排在按钮排最前面。
+             靠「一圈描边」跟实心按钮区分开，中间只显示数字（不写「绘制中」）。 -->
+        <div class="mini-timer" id="mini-timer">
+          <div class="ring-wrap">
+            <svg viewBox="0 0 260 260">
+              <circle class="ring-track" cx="130" cy="130" r="115" fill="none" stroke-width="10"/>
+              <circle id="ring" cx="130" cy="130" r="115" fill="none"
+                      stroke-width="10" stroke-linecap="round" stroke-dasharray="722.6" stroke-dashoffset="0"/>
+            </svg>
+            <div class="ring-time">
+              <div class="t" id="time-text">60</div>
+              <div class="p" id="phase-text">绘制中</div>
+            </div>
+          </div>
+        </div>
+        <!-- 「继续但留在本页」只在暂停时出现，排在「继续并切换到参考图模式」左边 -->
+        <button class="btn ghost" id="btn-resume-stay" hidden>继续并呆在这个页面</button>
         <button class="btn ghost" id="btn-pause">暂停</button>
         <button class="btn purple" id="btn-skip">跳过</button>
         <button class="btn ghost" id="btn-quit">结束</button>
@@ -826,11 +935,13 @@
   </main>
 </div>
 <!-- 全屏看图：点参考图右上角的 ⛶ 打开，滚轮最大放大到 500% 看细节；
-     拖动平移、双击复位、Esc 或 ✕ 退出。图只做等比缩放，绝不会被拉伸。 -->
-<button type="button" id="fs-btn" title="全屏看图">⛶</button>
+     拖动平移、双击复位、Esc 退出，或者**再点那个按钮**（它原地变成 ✕）退出。
+     图只做等比缩放，绝不会被拉伸。
+     ⚠️ 只有这一个按钮：进/出全屏都用它，位置大小一律不变（UI 不跳）。
+     它由 syncFsBtn() 挂进「当前有图的那一屏」（#screen-practice / #screen-welcome）。 -->
+<button type="button" id="fs-btn" title="全屏看图" hidden>⛶</button>
 <div id="img-fs" hidden>
   <img id="img-fs-el" src="" alt="参考图" draggable="false">
-  <button type="button" id="img-fs-close" title="退出全屏">✕</button>
   <div class="fs-tip">滚轮缩放（最大 500%）· 按住拖动平移 · 双击复位 · Esc 退出</div>
 </div>
 <!-- 题库分类教程内容：管理员可直接编辑 assets/guides.js 替换文案、插图、GIF 演示 -->
@@ -1174,7 +1285,7 @@ const $ = id => document.getElementById(id);
 const CIRC = 722.6;
 // ⚠️ 版本号**只写这一处**：侧栏那行、桌面 exe 生成的分享卡片、更新记录都跟着它走
 //    （桌面端 app_version() 会直接来 index.html 里读 APP_VER，别在别处再写死版本）。
-const APP_VER = "V1.2";
+const APP_VER = "V1.5";
 $("app-ver").textContent = APP_VER;
 // ---------- 设置交互 ----------
 // dataKey = 按钮上的 data-* 属性名；isNum = 是否转成数字
@@ -1271,6 +1382,7 @@ function setWelcomeHero(showRef) {
     const el = document.querySelector("#screen-welcome ." + c);
     if (el) el.hidden = !!showRef;
   });
+  syncFsBtn();   // 欢迎页有没有图变了 → 右上角全屏按钮跟着显 / 藏
 }
 // 参考图来源：文件选择 / 拖入 / Ctrl+V 粘贴，统一走 addImageSources
 function renderThumbs() {
@@ -1408,7 +1520,6 @@ function showRefThumb(i) {
   petPurePreload(src);          // 换预览也顺手预推，点开始时这张图已经在桌宠那边了
   $("welcome-img-el").src = src;
   webZoomReset($("welcome-img-el"));   // 换图：缩放回到 100%（不然上一张的倍数会带到新图上）
-  mountFsBtn($("welcome-img"));
   setWelcomeHero(true);
   updateUploadPreview();                    // 大方框里的预览跟着换
   $("thumb-grid").querySelectorAll("img").forEach(el => el.classList.remove("on"));
@@ -1488,7 +1599,8 @@ const DICT = {
     "小兔音色": "Xiaotu voice", "界面字体": "Font", "系统显示": "Appearance", "界面语言": "Language",
     "返回": "Back", "返回练习": "Back", "返回视频列表": "Back to list",
     "小兔陪你练速写啦~": "Let's sketch with Xiaotu!",
-    "暂停": "Pause", "跳过": "Skip", "结束": "End", "继续": "Resume",
+    "暂停": "Pause", "跳过": "Skip", "结束": "End",
+    "继续并切换到参考图模式": "Resume & back to ref mode", "继续并呆在这个页面": "Resume here",
     "绘制中": "Drawing", "休息一下": "Rest", "预备": "Ready",
     "本次练习完成": "Session complete", "完成张数": "Done", "专注秒数": "Seconds",
     "准备开始": "Ready", "开画！": "Start!", "倒计时": "Countdown",
@@ -2102,7 +2214,10 @@ function petTimerPush() {
   if (typeof fetch !== "function") return;
   const secs = Math.max(0, (S.endAt - Date.now()) / 1000);
   let left = -1, label = "";
-  if (S.phase === "ready") { left = Math.ceil(secs); label = "准备起笔"; }
+  if (S.paused && S.timing !== "none") {
+    // 暂停中：小兔头顶那个数字也一起定住（不然暂停了它还自己往下跑）
+    left = Math.max(0, Math.round(S.remaining || 0)); label = "已暂停";
+  } else if (S.phase === "ready") { left = Math.ceil(secs); label = "准备起笔"; }
   else if (S.phase === "draw") {
     if (S.timing === "none") { left = -1; }                       // 不计时：自由练习，不显示数字
     else if (S.timing === "up") { left = Math.floor((Date.now() - S.phaseStart) / 1000); label = "已画"; }
@@ -2110,8 +2225,61 @@ function petTimerPush() {
   } else if (S.phase === "rest") { left = Math.ceil(secs); label = "休息一下"; }
   const url = PET_BASE + "/pet?cmd=timer&left=" + left + "&label=" + encodeURIComponent(label);
   fetch(url, { cache: "no-store" }).then(r => (r && r.ok) ? r.json() : null).then(j => {
-    if (j && j.quit) pureRemoteQuit();
+    if (!j) return;
+    if (j.quit) pureRemoteQuit();
+    // 桌面端右键 / 快捷键送过来的两个指令（搭每秒这趟心跳的顺风车）
+    if (j.skip) petRemoteSkip();
+    // 桌面端送来的是**目标状态**（不是切换）：网页自己也有暂停按钮，
+    // 用「切换」的话两边各按一次就会错开（网页继续、桌面还当暂停中）
+    if (j.pause === 1) pauseNow();
+    else if (j.pause === 0) resumeNow();
   }).catch(() => {});
+}
+// 桌面端「跳过这张图」（右键菜单 / Ctrl+1）：原地换下一张，位置与缩放比例由桌面端沿用
+function petRemoteSkip() {
+  if (S.phase === "idle") return;
+  nextPrompt();
+}
+// 暂停后「继续」要说清楚点了会去哪（就是回到纯净参考图模式），并且升成主推按钮：
+// 文案、主色实心、放大一档都在 syncPauseBtn 里一次换好（2026-09-30 DQ 定）
+const RESUME_TEXT = "继续并切换到参考图模式";
+const RESUME_STAY_TEXT = "继续并呆在这个页面";
+function syncPauseBtn() {
+  const p = $("btn-pause"), s = $("btn-skip"), st = $("btn-resume-stay");
+  if (p) {
+    p.textContent = S.paused ? RESUME_TEXT : "暂停";
+    p.classList.toggle("resume-main", S.paused);   // 暂停 → 主色实心 + 放大
+    p.classList.toggle("ghost", !S.paused);        // 平常 → 普通色调
+  }
+  if (s) {
+    s.classList.toggle("purple", !S.paused);
+    s.classList.toggle("ghost", S.paused);         // 暂停时「跳过」退回普通色调
+  }
+  // 「继续并呆在这个页面」：只有暂停时才有意义（没暂停时它点了等于没事干）
+  if (st) st.hidden = !S.paused;
+  // 给这一屏挂个 .paused：窄窗口下 CSS 只收窄「暂停时」的这一排，不牵动平常那三颗
+  const scr = $("screen-practice");
+  if (scr) scr.classList.toggle("paused", !!S.paused);
+}
+// 暂停：把剩余时间冻结下来（S.remaining 就停在那一刻）
+function pauseNow() {
+  if (S.phase === "idle" || S.paused) return;
+  S.paused = true; syncPauseBtn();
+  stopTick();
+  pauseSound();
+}
+// 继续：把暂停前剩下的时间接回去（不会重新计时）
+//   stayHere=true → 「继续并呆在这个页面」：只解除暂停，网页这一屏照旧留着，不切参考图模式
+function resumeNow(stayHere) {
+  if (S.phase === "idle" || !S.paused) return;
+  S.paused = false; S.endAt = Date.now() + S.remaining * 1000;
+  syncPauseBtn();
+  resumeSound();
+  if (!stayHere) pureBackOnResume();    // 默认继续 = 回到参考图模式（沿用上次的位置和大小）
+}
+// 暂停 / 继续（网页按钮与桌面端 ~ 键共用同一套逻辑）
+function togglePause() {
+  if (S.paused) resumeNow(); else pauseNow();
 }
 // 桌面端右键「退出速写」：等同于点「结束」，结束这一组并回到主界面
 function pureRemoteQuit() {
@@ -2176,14 +2344,18 @@ function showScreen(name) {
     const f = $("bili-player"); // 离开参考页时停止播放
     if (f && f.getAttribute("src")) { const s0 = f.src; f.src = s0; }
   }
+  // 换屏时全屏层一定收掉：不然按钮会被挪到新那一屏去（全屏里位置一动就是「UI 跳」）
+  if (!$("img-fs").hidden) closeImgFs();
+  syncFsBtn();   // 全屏按钮只跟着「当前这一屏」走（别的屏一律藏起来）
 }
 function renderPrompt() {
   const item = S.queue[S.idx];
   if (!item) { $("prog-line").textContent = "还没有参考图，请先上传"; return; }
   $("prog-line").textContent = progLine();
   if (item.img) {
-    $("prompt-box").innerHTML = `<img src="${item.img}" alt="参考图" draggable="false">`;
-    mountFsBtn($("prompt-box"));   // 右上角「全屏看图」按钮（innerHTML 重画后要挂回去）
+    // .shot 是图的实际画布（绝对定位撑满方框内圈）：图片按「尽量大又不超框」等比显示
+    $("prompt-box").innerHTML = `<div class="shot"><img src="${item.img}" alt="参考图" draggable="false"></div>`;
+    syncFsBtn();   // 右上角「全屏看图」按钮挂到这一屏（innerHTML 重画后要重新挂）
   } else {
     $("prompt-box").innerHTML = `<div><span class="txt">还没有参考图，请先上传</span></div>`;
   }
@@ -2298,34 +2470,61 @@ bindWebZoom("prompt-box");      // 练习页那张参考图
 bindWebZoom("welcome-img");     // 开始前的那张大图
 // -- 全屏看图：图上右上角那个 ⛶ ------------------------------------------
 // 全屏里滚轮最大能到 500%（普通画面仍是 200%），只看细节，图本身不会被拉伸。
+// 🔴 进出全屏是**同一个按钮**：点它 → 全屏打开、按钮原地变成 ✕（位置/大小/样式全不变）；
+//    再点它 → 退出、变回 ⛶。所以没有第二个关闭按钮，UI 不会跳。
 function openImgFs(src) {
   if (!src) return;
   const el = $("img-fs-el");
   el.src = src; webZoomReset(el);
   $("img-fs").hidden = false;
+  document.body.classList.add("fs-open");   // 把按钮抬到全屏层上面（z-index 见 CSS）
+  $("fs-btn").textContent = "✕";
+  $("fs-btn").title = "退出全屏";
 }
-function closeImgFs() { $("img-fs").hidden = true; }
-// ⚠️ 按钮节点要自己攥在手里：练习页每次 renderPrompt 都会重画 innerHTML，
-//    挂在框里的按钮会被一起冲掉 —— 攥住引用才能重新挂回去（用 $("fs-btn") 会找不着）。
-const FS_BTN = $("fs-btn");
-FS_BTN.addEventListener("click", e => {
+function closeImgFs() {
+  $("img-fs").hidden = true;
+  document.body.classList.remove("fs-open");
+  $("fs-btn").textContent = "⛶";
+  $("fs-btn").title = "全屏看图";
+}
+$("fs-btn").addEventListener("click", e => {
   e.preventDefault(); e.stopPropagation();
-  const box = FS_BTN.parentElement;
-  const img = box && box.querySelector("img");
+  if (!$("img-fs").hidden) { closeImgFs(); return; }   // 已经开着 → 这一下是「退出」
+  // ⚠️ 按钮现在挂在**卡片**里（不是图框里），图要去这一屏的图框里找
+  const img = fsImgOf($("fs-btn").parentElement);
   openImgFs(img ? img.currentSrc || img.src : "");
 });
-$("img-fs-close").addEventListener("click", closeImgFs);
 $("img-fs").addEventListener("click", e => { if (e.target === $("img-fs")) closeImgFs(); });
 bindWebZoom("img-fs");
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("img-fs").hidden) closeImgFs(); });
-// 全屏按钮挂到「当前有图」的那个框上（练习页换图时 innerHTML 会重画，所以要重新挂）
-function mountFsBtn(box) {
-  if (!FS_BTN || !box) return;
-  if (box.querySelector("img")) box.appendChild(FS_BTN);
+// 这一屏里「能全屏的那张图」在哪：练习页在 .prompt-box，欢迎页在 #welcome-img
+// （欢迎页没选图时整块是 hidden 的 → 返回 null，按钮就该藏起来）
+function fsImgOf(stage) {
+  if (!stage) return null;
+  const box = stage.querySelector("#prompt-box, #welcome-img");
+  if (!box || box.hidden) return null;
+  return box.querySelector("img");
+}
+// 把按钮挂进「这一屏的卡片」里（位置由 CSS 定死在内容区右上角，和「第 X / N 张」上边齐平）。
+// ⚠️ 用 getElementById 现取，不用模块级常量：按钮是静态节点，不会被 innerHTML 冲掉，
+//    而 syncFsBtn 可能在脚本还没跑到这里时就被 showScreen() 调用（避免 const 的 TDZ）。
+function mountFsBtn(stage) {
+  const b = document.getElementById("fs-btn");
+  if (!b || !stage) return;
+  if (!fsImgOf(stage)) { b.hidden = true; return; }   // 没图就别孤零零飘着
+  if (b.parentElement !== stage) stage.appendChild(b);
+  b.hidden = false;
+}
+// 换屏 / 换图都刷一遍：按钮只跟着「当前这一屏」走
+function syncFsBtn() {
+  const n = ["practice", "welcome"].find(x => !$("screen-" + x).hidden);
+  if (!n) { const b = document.getElementById("fs-btn"); if (b) b.hidden = true; return; }
+  mountFsBtn($("screen-" + n));
 }
 function startPhase(phase, seconds) {
   S.phase = phase; S.totalPhase = seconds; S.remaining = seconds;
   S.paused = false; S.endAt = Date.now() + seconds * 1000;
+  syncPauseBtn();   // 新的一段：按钮排回到「暂停 / 跳过(主色)」，别把上一轮暂停时的样子留着
   S.phaseStart = Date.now(); S.goalHit = false;
   S.liveSec = 0; S.lastTickAt = Date.now();
   const labels = { draw: tr("绘制中"), rest: tr("休息一下"), ready: tr("预备") };
@@ -2338,6 +2537,7 @@ function startPhase(phase, seconds) {
     wrap.classList.toggle("timer-off", S.timing === "none");
     if (S.timing === "none") $("time-text").textContent = "自由练习";
     else if (S.timing === "up") $("time-text").textContent = "0";
+    $("time-text").classList.remove("long");   // 新一段：先把 m:ss 的小字号摘掉
     $("btn-skip").textContent = (S.timing === "down") ? "跳过" : "下一张";
     renderPrompt();
     if (S.timing !== "none") startTick();   // 不计时：不播滴答声
@@ -2379,6 +2579,8 @@ function tick() {
     $("time-text").textContent = c >= 100
       ? `${Math.floor(c / 60)}:${String(c % 60).padStart(2, "0")}`
       : c;
+    // 小圆环只有 46px，m:ss 这种 4~5 个字要收一号字才不顶到描边（见 .mini-timer .t.long）
+    $("time-text").classList.toggle("long", c >= 100);
     const frac = Math.min(el / S.dur, 1);
     $("ring").setAttribute("stroke-dashoffset", CIRC * (1 - frac));
     if (!S.goalHit && el >= S.dur) { S.goalHit = true; beep(880, 200); } // 到达目标轻提示（不强制切换）
@@ -2391,6 +2593,7 @@ function tick() {
   $("time-text").textContent = c0 >= 100
     ? `${Math.floor(c0 / 60)}:${String(c0 % 60).padStart(2, "0")}`
     : c0;
+  $("time-text").classList.toggle("long", c0 >= 100);
   $("ring").setAttribute("stroke-dashoffset", CIRC * (1 - left / S.totalPhase));
   if (pc !== c0) {
     if (S.phase === "ready") {
@@ -2458,6 +2661,10 @@ function nextPrompt() {
     const el = Math.max(0, (Date.now() - S.phaseStart) / 1000);
     S.doneCount++; S.focusSec += el; saveLog(el);
   }
+  // ✅ 只选了一张参考图：**根本没有下一张**（队列里剩下那些全是同一张占出来的空位），
+  //    所以「跳过」不该一张张空转、最后莫名把人送到结算页 —— 提示一句，
+  //    直接结束这一组、回主界面（2026-09-30 DQ 定）。
+  if (S.images.length <= 1) { endGroupToWelcome(NO_NEXT_TEXT); return; }
   if (S.idx >= S.queue.length - 1) { finish(); return; }
   S.idx++;
   startPhase("draw", S.dur);
@@ -2774,17 +2981,20 @@ $("btn-start").addEventListener("click", () => {
     if (src) petPureStart(src);
   }
 });
-$("btn-pause").addEventListener("click", () => {
-  if (S.paused) {
-    S.paused = false; S.endAt = Date.now() + S.remaining * 1000;
-    $("btn-pause").textContent = "暂停";
-    resumeSound();
-  } else {
-    S.paused = true; $("btn-pause").textContent = "继续";
-    stopTick();          // 暂停时滴答声也要停
-    pauseSound();
-  }
-});
+// 点「继续」＝接着画：如果这一组本来就在参考图模式里（之前用过大窗），
+// 就直接退出网页 UI 回到参考图模式，大窗仍是上次那个位置和大小。
+// ⚠️ 只有这一组真的用过参考图模式才这么做（_pureCurSrc 有值）：
+//    单独开网页练的时候不该把界面收掉。
+function pureBackOnResume() {
+  if (S.phase === "idle" || !_pureCurSrc) return false;
+  const src = currentRefSrc() || _pureCurSrc;
+  if (!src) return false;
+  petPureStart(src);      // 桌面端：收起网页 UI + 把大图唤回来（位置/大小沿用上次）
+  return true;
+}
+$("btn-pause").addEventListener("click", togglePause);
+// 左边那颗：继续，但留在当前页面（不把参考图模式切回来）
+$("btn-resume-stay").addEventListener("click", () => resumeNow(true));
 $("btn-skip").addEventListener("click", nextPrompt);
 $("btn-quit").addEventListener("click", () => { clearInterval(S.timer); stopTick(); finish(); });
 function finish() {
@@ -2801,6 +3011,22 @@ function finish() {
     S.doneCount > 0 ? "完成一部分也是进步，明天继续加油" : "没关系，准备好再开始一轮吧");
   renderStats();
   showScreen("summary");
+}
+// 只选了一张参考图时点「跳过」用的提示语（DQ 原文，别改）
+const NO_NEXT_TEXT = "已经是最后一张图";
+// 「没有下一张」的收尾：和小兔说一声 → 结束这一组 → 回主界面。
+// 和 finish() 的区别：**不弹结算页**（这一组本来就只画了一张），但
+// 该收的收干净：停计时/停滴答、结束陪画、退出纯净参考图模式（顺带唤回主界面）、
+// 让延迟中的计时失效、刷新侧栏的打卡与速写值。
+function endGroupToWelcome(msg) {
+  clearInterval(S.timer);
+  stopTick();
+  compSessionEnd();                 // 结束陪画：让桌宠退出专注状态
+  petPureEnd();                     // 若在纯净参考图模式：退出并唤回主界面
+  S.phase = "idle"; S.readyToken++; // 使延迟中的计时启动失效
+  petSay(msg, 7);                   // 小兔气泡（网页单独打开时请求失败会静默忽略，和打卡提示同一路子）
+  renderStats();
+  showScreen("welcome");
 }
 $("btn-again").addEventListener("click", () => $("btn-start").click());
 $("btn-back").addEventListener("click", () => showScreen("welcome"));

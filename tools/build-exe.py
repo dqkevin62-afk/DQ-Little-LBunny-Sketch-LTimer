@@ -44,10 +44,18 @@ ARGS = [
 
 
 def read_version():
-    """从 index.html 侧栏读版本号，保证 exe / 页面 / 更新记录三处一致。"""
+    """版本号**只认 index.html 里的 APP_VER**（和网页侧栏、exe 分享卡片同一个来源）。
+
+    ⚠️ 别再去正则侧栏那个 `<span class="ver">`：它带 `id="app-ver"` 属性，
+    写死 `<span class="ver">` 是**永远匹配不到**的（一直静默兜底成 V0.2 →
+    打包完打印出上一个版本的更新记录，2026-09-30 打包 V1.3 时才发现）。
+    """
     try:
         html = io.open(os.path.join(ROOT, "index.html"), encoding="utf-8").read()
-        m = re.search(r'<span class="ver">\s*(V[\d.]+)\s*</span>', html)
+        m = re.search(r'APP_VER\s*=\s*"([^"]+)"', html)
+        if m:
+            return m.group(1)
+        m = re.search(r'<span class="ver"[^>]*>\s*(V[\d.]+)\s*</span>', html)
         return m.group(1) if m else ""
     except Exception:
         return ""

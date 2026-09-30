@@ -54,6 +54,53 @@ def code(path, method="GET", body=None):
         return -1, str(e)
 
 
+def _find_class(cls):
+    """按窗口类名找窗口（小兔主窗 / 纯净大图窗）。"""
+    import ctypes
+    u = ctypes.windll.user32
+    u.EnumWindows.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    u.EnumWindows.restype = ctypes.c_bool
+    u.GetClassNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+    u.GetClassNameW.restype = ctypes.c_int
+    u.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint,
+                               ctypes.c_size_t, ctypes.c_ssize_t]
+    u.PostMessageW.restype = ctypes.c_bool
+    hit = []
+
+    def cb(h, _):
+        b = ctypes.create_unicode_buffer(256)
+        u.GetClassNameW(h, b, 256)
+        if b.value == cls:
+            hit.append(h)
+        return True
+
+    u.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p,
+                                     ctypes.c_void_p)(cb), None)
+    return (u, hit[0]) if hit else (u, None)
+
+
+def ensure_no_pet(wait=10.0):
+    """跑真进程测试前先把上次残留的小兔请走。
+
+    ⚠️ 2026-09-30 踩：残留实例占着**单实例互斥体**和 **~ / Ctrl+1 全局热键**，
+    新起的进程一看「已有小兔在运行」就退出，后面所有断言都会串到那只旧小兔身上。
+    """
+    if code("/ping")[0] != 200:
+        return True
+    u, hwnd = _find_class("DQXiaotuPetWnd")
+    if hwnd:
+        u.PostMessageW(hwnd, 0x0010, 0, 0)      # WM_CLOSE：让窗口线程自己收尾
+    t0 = time.time()
+    while time.time() - t0 < wait:
+        if code("/ping")[0] != 200:
+            return True
+        time.sleep(0.4)
+    return code("/ping")[0] != 200
+
+
+check("跑之前没有残留的小兔实例（不然单实例锁 + 全局热键会串台）",
+      ensure_no_pet())
+
 proc = subprocess.Popen([PY, "desktop/xiaotu_pet.py", "--no-page"])
 try:
     up = False
@@ -121,6 +168,75 @@ try:
           % (t_pre, t_in, t_full))
     check("预推过的进入明显更快（不用再编码/传输/解码）",
           t_in < t_full * 0.6 or t_in < 0.35, "缓存 %.2fs / 带图 %.2fs" % (t_in, t_full))
+
+    # ---- 点「继续」回到参考图模式：位置和大小都沿用上一次（真窗口矩形）----
+    import ctypes
+    from ctypes import wintypes
+    u32 = ctypes.WinDLL("user32", use_last_error=True)
+    u32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    u32.FindWindowW.restype = wintypes.HWND
+    u32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    u32.GetWindowRect.restype = wintypes.BOOL
+
+    def pure_rect():
+        h = u32.FindWindowW("DQXiaotuPetWndPure", None)
+        if not h:
+            return None
+        r = wintypes.RECT()
+        if not u32.GetWindowRect(h, ctypes.byref(r)):
+            return None
+        return (r.left, r.top, r.right - r.left, r.bottom - r.top)
+
+    code("/pet_pure", "POST", '{"on":false}')
+    time.sleep(0.5)
+    code("/pet_pure", "POST", _json.dumps({"d": big, "on": True}))   # ① 正常出大图
+    time.sleep(0.9)
+    r1 = pure_rect()
+    check("参考图大窗建出来了（读得到窗口矩形）", r1 is not None, str(r1))
+    code("/pet_pure", "POST", '{"on":false}')          # ② 相当于右键「显示主界面」
+    time.sleep(0.5)
+    code("/pet_pure", "POST", '{"d":"","on":true}')    # ③ 网页点「继续」：回大图
+    time.sleep(0.9)
+    r2 = pure_rect()
+    check("点继续回到大图：还是上一次的位置和大小",
+          r1 is not None and r2 is not None and r2 == r1, "%s -> %s" % (r1, r2))
+
+    # ---- 参考图模式：右键「跳过」/ Ctrl+1 / ~ 是不是真能传到网页 ----
+    # 桌面端只置信号，网页每秒来取一次；这里就按真实链路验「置了 → 心跳带回去 → 清掉」
+    u32.PostMessageW.argtypes = [wintypes.HWND, ctypes.c_uint, ctypes.c_size_t, ctypes.c_size_t]
+    u32.PostMessageW.restype = wintypes.BOOL
+    pet_hwnd = u32.FindWindowW("DQXiaotuPetWnd", None)
+    check("找得到小兔本体窗口（快捷键由它接收）", bool(pet_hwnd), str(pet_hwnd))
+    code("/pet_pure", "POST", _json.dumps({"d": big, "on": True}))
+    time.sleep(0.8)
+
+    u32.PostMessageW(pet_hwnd, 0x0312, 0x51B3, 0)          # WM_HOTKEY + Ctrl+1
+    time.sleep(0.4)
+    _, b = code("/pet?cmd=timer&left=100")
+    j = _json.loads(b)
+    check("按 Ctrl+1 → 心跳带回 skip（网页据此跳下一张）", j.get("skip") is True, b)
+    _, b = code("/pet?cmd=timer&left=100")
+    check("skip 取过一次就清零（不会连跳两张）",
+          _json.loads(b).get("skip") is False, b)
+
+    u32.PostMessageW(pet_hwnd, 0x0312, 0x51B1, 0)          # WM_HOTKEY + ~
+    time.sleep(0.4)
+    _, b = code("/pet?cmd=timer&left=100")
+    check("按 ~ → 心跳带回 pause=1（网页据此暂停）",
+          _json.loads(b).get("pause") == 1, b)
+    _, b = code("/pet?cmd=timer&left=100")
+    check("pause 取过一次就没了（不会重复下指令）",
+          "pause" not in _json.loads(b), b)
+    # 再按一次 ~：恢复要等「继续速写 → 3 2 1」播完才放行（不是一按就放）
+    u32.PostMessageW(pet_hwnd, 0x0312, 0x51B1, 0)
+    time.sleep(0.4)
+    _, b = code("/pet?cmd=timer&left=100")
+    check("倒数还没播完时，不急着让网页继续", "pause" not in _json.loads(b), b)
+    time.sleep(4.2)
+    _, b = code("/pet?cmd=timer&left=100")
+    check("3 2 1 播完 → 心跳带回 pause=0（网页接着暂停前的计时）",
+          _json.loads(b).get("pause") == 0, b)
+    code("/pet_pure", "POST", '{"on":false}')
 finally:
     proc.terminate()
     try:

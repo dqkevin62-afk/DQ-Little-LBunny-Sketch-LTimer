@@ -31,13 +31,17 @@ import urllib.request
 from urllib.parse import quote, urlparse, parse_qs
 
 APP_NAME = "DQ小兔速写计时姬"      # 显示用（exe 名 / 桌宠窗口标题）
-APP_VER_FALLBACK = "V1.2"         # 只有读不到 index.html 时才用它（真正来源是 APP_VER）
+APP_VER_FALLBACK = "V1.5"         # 只有读不到 index.html 时才用它（真正来源是 APP_VER）
 # 数据目录沿用最初的名字，改名也不会导致网页资源和浏览器档案重新生成一遍
 DATA_NAME = "DQ速写计时姬"
 PET_CLASS = "DQXiaotuPetWnd"
 PET = None        # 桌宠实例（供 HTTP 处理器调用陪画模式）
 PURE_WIN = None   # 纯净参考图模式的独立大图窗口实例
 PURE_LAST_POS = None  # 参考图大窗上次待的位置（左上角 x,y）：跳过 / 自动换图都接着开在这儿
+PURE_LAST_SIZE = None  # 参考图大窗上次的大小（w,h）：回去看同一张图时连大小一起还原
+PURE_LAST_ZOOM = None  # 参考图大窗上次的缩放倍率：跳过换下一张时沿用同一个比例
+PURE_SKIP_REQ = False  # 桌面端请网页「跳过这张图」（右键菜单 / Ctrl+1），心跳取走后清零
+PURE_PAUSE_WANT = None  # 桌面端要网页变成的状态：True=暂停 / False=继续（None=没有指令）
 PAGE_HWND = None  # 速写主界面（浏览器 --app 窗口）句柄，打开后记住它，别靠标题临时找
 PAGE_PID = None   # 自己拉起的浏览器进程号：退出桌宠时如需强关，只动这一个实例
 
@@ -59,6 +63,96 @@ def set_pure_last_pos(x, y):
 def pure_last_pos():
     """上次参考图大窗的位置；没开过就是 None（走默认的屏幕居中）。"""
     return PURE_LAST_POS
+
+
+def set_pure_last_size(w, h):
+    """记住参考图大窗的大小：主人把图放到多大，回去看时就还是多大。
+
+    位置由 `set_pure_last_pos` 单独记（滚轮缩放不改写位置，但会改写大小 ——
+    缩放本来就是在调大小，下次换图 / 回到参考图模式应该沿用这个手感）。
+    """
+    global PURE_LAST_SIZE
+    try:
+        PURE_LAST_SIZE = (max(1, int(w)), max(1, int(h)))
+    except Exception:
+        PURE_LAST_SIZE = None
+
+
+def pure_last_size():
+    """上次参考图大窗的大小；没开过就是 None（按屏幕比例出默认大小）。"""
+    return PURE_LAST_SIZE
+
+
+def set_pure_last_zoom(z):
+    """记住参考图大窗的**缩放倍率**：换下一张时沿用同一个比例（不是一律回到 100%）。
+
+    同一张图 → 倍率一样，出来的大小自然一模一样（点「继续」回去看就是原样）；
+    换了一张比例不同的图 → 同样是「按这个倍率放大」，等比缩放，绝不拉变形。
+    """
+    global PURE_LAST_ZOOM
+    try:
+        PURE_LAST_ZOOM = float(z)
+    except Exception:
+        PURE_LAST_ZOOM = None
+
+
+def pure_last_zoom():
+    """上次参考图大窗的缩放倍率；没开过就是 None（按 100% 出图）。"""
+    return PURE_LAST_ZOOM
+
+
+def request_pure_skip():
+    """桌面端请网页「跳过这张图」：下一张仍开在原位置、原缩放比例。
+
+    桌面端改不了网页里的图，所以只在这里置一个信号，网页每秒一次的心跳
+    （GET /pet?cmd=timer）把它取走，取走后自动清零（不会重复跳）。
+    """
+    global PURE_SKIP_REQ
+    PURE_SKIP_REQ = True
+    return True
+
+
+def take_pure_skip():
+    """网页取走「跳过」信号（取一次就清掉）。"""
+    global PURE_SKIP_REQ
+    v = PURE_SKIP_REQ
+    PURE_SKIP_REQ = False
+    return v
+
+
+def request_pure_pause(want):
+    """桌面端告诉网页「要暂停 / 要继续」（~ 键 / 右键菜单）。
+
+    ⚠️ 传的是**目标状态**（True=暂停、False=继续），不是「切换一下」：
+    网页上也有暂停按钮，用切换的话两边各按一次就会错开（网页继续、桌面还当暂停中）。
+    """
+    global PURE_PAUSE_WANT
+    PURE_PAUSE_WANT = bool(want)
+    return True
+
+
+def take_pure_pause():
+    """网页取走「暂停 / 继续」的目标状态（取一次就清掉；None = 这趟没有指令）。"""
+    global PURE_PAUSE_WANT
+    v = PURE_PAUSE_WANT
+    PURE_PAUSE_WANT = None
+    return v
+
+
+def set_pause_hold(on):
+    """让小兔头顶那个倒计时**立刻**停住 / 继续走。
+
+    网页要等下一秒心跳才知道，主人按下 ~ 的那一刻桌面端就得有反应，
+    所以这里先在桌面端把数字冻住（数字保持按下时的值，标签写「已暂停」）。
+    """
+    p = PET
+    if p is None:
+        return False
+    try:
+        p.set_pause_hold(bool(on))
+        return True
+    except Exception:
+        return False
 
 
 def _clamp_v(v, lo, hi):
@@ -168,6 +262,34 @@ ALREADY_TEXT = "小兔已经在运行了哦"
 #    —— 2026-09-29 整条热键链路删干净，别再回加。
 FLIP_MENU_TEXT = "水平翻转参考图"
 
+# 参考图模式里的两个快捷键（2026-09-30 加）
+# ⚠️ 只在参考图模式里注册、退出立刻注销（见 _register_pure_hotkeys），
+#    平时不占任何按键 —— 就是吸取了 H 键的教训。
+WM_HOTKEY = 0x0312
+MOD_NOREPEAT = 0x4000     # 长按不连发，按一次只算一次
+MOD_SHIFT = 0x0004
+MOD_CONTROL = 0x0002
+VK_OEM_3 = 0xC0           # ESC 下面那个键：直接按是 `，Shift 一起按是 ~（两个都认）
+VK_1 = 0x31               # Ctrl+1：跳过这张图
+HOTKEY_PAUSE_ID = 0x51B1
+HOTKEY_PAUSE_SHIFT_ID = 0x51B2
+HOTKEY_SKIP_ID = 0x51B3
+
+# 鼠标在大图上停够 0.3 秒 → 浮出操作提示，显示几秒后自己收起来
+PURE_HINT_DELAY = 0.3
+PURE_HINT_SECS = 4.0
+
+# 暂停 / 继续（~ 键 或 右键菜单）
+PURE_PAUSE_VEIL = 76          # 0.3 × 255：暂停时蒙在大图上的那层黑
+PURE_PAUSE_TITLE = "暂停中"
+PURE_PAUSE_SUB = '按键盘 "~" 键继续'
+PURE_RESUME_TITLE = "继续速写"
+PURE_RESUME_TEXT_SECS = 0.9   # 「继续速写」这几个字停留多久
+PURE_COUNTDOWN_SECS = 1.0     # 3 / 2 / 1 每个数字停多久
+PURE_HINT_LINES = ("鼠标滚轮上下滚动：缩放图片大小",
+                   "Ctrl+1：跳过这张图",
+                   "~：暂停速写（再按一次继续）")
+
 MF_STRING = 0x0000
 MF_POPUP = 0x0010
 MF_SEPARATOR = 0x0800
@@ -218,6 +340,11 @@ user32.ReleaseCapture.argtypes = []
 user32.SetTimer.argtypes = [HANDLE, ctypes.c_size_t, ctypes.c_uint, ctypes.c_void_p]
 user32.SetTimer.restype = ctypes.c_size_t
 user32.KillTimer.argtypes = [HANDLE, ctypes.c_size_t]
+# 参考图模式的两个快捷键（~ 暂停 / Ctrl+1 跳过）：只在该模式里注册
+user32.RegisterHotKey.argtypes = [HANDLE, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+user32.RegisterHotKey.restype = ctypes.c_bool
+user32.UnregisterHotKey.argtypes = [HANDLE, ctypes.c_int]
+user32.UnregisterHotKey.restype = ctypes.c_bool
 user32.GetDC.argtypes = [HANDLE]
 user32.GetDC.restype = HANDLE
 user32.ReleaseDC.argtypes = [HANDLE, HANDLE]
@@ -711,6 +838,11 @@ def destroy_pure_window():
     except Exception:
         pass
     try:
+        if PET is not None:
+            PET._unregister_pure_hotkeys()   # 大窗没了：~ / Ctrl+1 也一并还给系统
+    except Exception:
+        pass
+    try:
         if pw.hwnd:
             user32.DestroyWindow(pw.hwnd)
     except Exception:
@@ -975,7 +1107,16 @@ class _SearchHandler(http.server.BaseHTTPRequestHandler):
                     left = _int((qs.get("left") or ["-1"])[0], -1)
                     label = (qs.get("label") or [""])[0]
                     pet_call("set_timer", left, label)
-                    self._send_json({"ok": True, "left": left, "quit": pure_quit_active()})
+                    # 网页每秒来一次：桌面端的「跳过 / 暂停·继续」就搭这趟车送过去
+                    # （取一次就清掉，不会重复跳；quit 同理）
+                    # ⚠️ pause 传的是**目标状态** 1=暂停 / 0=继续，不是「切换一下」
+                    resp = {"ok": True, "left": left,
+                            "quit": pure_quit_active(),
+                            "skip": take_pure_skip()}
+                    want = take_pure_pause()
+                    if want is not None:
+                        resp["pause"] = 1 if want else 0
+                    self._send_json(resp)
                 elif cmd == "card":
                     path = pet_call("export_card", (qs.get("kind") or ["sticker"])[0])
                     self._send_json({"ok": bool(path), "path": path or ""})
@@ -1364,6 +1505,8 @@ class PetWindow:
         self.hop_dur = 0.9
         self.hop_amp = 0.0
         self.timer_id = 1
+        self.hint_timer_id = 2         # 参考图大图上的操作提示（悬停 0.3s 浮出、几秒后收起）
+        self.resume_timer_id = 3       # 恢复速写时的「继续速写 → 3 → 2 → 1」动画
         self.dragging = False
         self.drag_start = (0, 0)
         self.drag_win = (0, 0)
@@ -1402,6 +1545,15 @@ class PetWindow:
         # 纯净参考图模式：只留置顶大图，主界面最小化（滚轮缩放 / 右键另存）
         self.pure = False              # 是否处于纯净参考图模式
         self._last_pure_src = None     # 最近一次进参考图模式用的那张图（右键「返回当前参考图模式」要用）
+        self._timer_at = 0.0           # 最近一次收到网页心跳的时间（>0 且很近 = 这一组还在练）
+        self._hint_deadline = 0.0      # 鼠标停够 0.3 秒就浮出操作提示
+        self._hint_until = 0.0         # 提示自动消失的时间
+        self._hint_shown = False
+        self._hk_on = False            # 参考图模式里的两个快捷键（~ 暂停 / Ctrl+1 跳过）是否已注册
+        self._pause_hold = False       # 桌面端已就地暂停（不等网页心跳）：小兔头顶数字冻住
+        self.pure_paused = False       # 大图上正蒙着「暂停中」那层黑
+        self._resume_step = -1         # 恢复动画：-1=没在播，0=「继续速写」，3/2/1=倒数
+        self._resume_until = 0.0
         self.zoom = 1.0                # 缩放倍率 0.5 ~ 2.0
         self._pure_img = None          # 原图（RGBA，全分辨率，供缩放重采样）
         self._pure_base = None         # 基准显示尺寸 (w, h)，zoom=1.0 时的大小
@@ -1499,6 +1651,16 @@ class PetWindow:
                 canvas = self._draw_text_bubble(canvas, band, self.bubble_text or "")
             else:
                 canvas = self._draw_expr_bubble(canvas, band, self.bubble_expr or "happy")
+        # 大图：暂停时蒙一层 30% 黑并写「暂停中」；恢复时播「继续速写 → 3 2 1」；
+        # 平时鼠标停够 0.3 秒才浮出操作提示（不占画面）
+        if self.kind == "pure":
+            if self.pure_paused:
+                canvas = self._draw_pure_veil(canvas, PURE_PAUSE_TITLE, PURE_PAUSE_SUB, True)
+            elif self._resume_step >= 0:
+                t, s = self._resume_title()
+                canvas = self._draw_pure_veil(canvas, t, s, False)
+            elif self._hint_shown:
+                canvas = self._draw_pure_hint(canvas)
         self._make_dib(canvas)
         self._blit()
 
@@ -1778,8 +1940,11 @@ class PetWindow:
         看起来就是「界面慢慢缩小」；现在点下去界面瞬间就没了。
         万一大图没起来，再把主界面还回去（回滚），不会把用户晾在空白桌面。
         """
-        if self._display_src:
-            self._last_pure_src = self._display_src   # 记住这张图：右键「返回当前参考图模式」要能回到它
+        # 网页上点「继续」回参考图模式时，`_display_src` 已经被清掉了（小兔变回本体），
+        # 这时就靠 `_last_pure_src` 把刚才那张图找回来 —— 不然大图起不来、界面还得还给人家。
+        src = self._display_src or self._last_pure_src
+        if src:
+            self._last_pure_src = src        # 记住这张图：右键「返回当前参考图模式」要能回到它
         try:
             hide_page_window()               # ① 主界面立刻消失（SW_HIDE，无动画）
         except Exception:
@@ -1787,7 +1952,7 @@ class PetWindow:
         pw = None
         try:
             pw = ensure_pure_window()
-            if not pw.show_image(self._display_src):
+            if not pw.show_image(src):
                 log("enter_pure：参考图加载失败")
                 restore_page_window()        # 回滚：图没起来就把界面还给人家
                 return False
@@ -1811,8 +1976,22 @@ class PetWindow:
             self.repaint()
         except Exception:
             log("enter_pure：重排/重绘失败\n" + traceback_str())
+        try:
+            self._register_pure_hotkeys()     # ~ 暂停 / Ctrl+1 跳过（只在参考图模式里）
+        except Exception:
+            log("enter_pure：快捷键注册失败\n" + traceback_str())
         log("enter_pure 完成 base=%s" % (pw._pure_base,))
         return True
+
+    def in_session(self):
+        """这一组是不是还在练（网页还在每秒推心跳）。
+
+        右键菜单里的「跳过这张图」靠它显隐：练完 / 没开始就不该出现，
+        免得点了没反应。
+        """
+        if self.pure:
+            return True
+        return self._timer_at > 0 and (time.time() - self._timer_at) < 3.0
 
     def has_pure_src(self):
         """现在有没有「能回到参考图模式」的那张图（决定右键菜单要不要显示那一项）。"""
@@ -1820,6 +1999,300 @@ class PetWindow:
             return True
         pw = PURE_WIN
         return bool(pw is not None and getattr(pw, "_display_src", None))
+
+    def skip_current_ref(self):
+        """右键 / Ctrl+1「跳过这张图」：请网页换下一张。
+
+        桌面端改不了网页里的图，所以只置一个信号让网页每秒的心跳取走；
+        下一张由网页推过来时，`show_image` 会按记住的位置和缩放比例开出来
+        —— 也就是**原地、原大小**换图，不会跑回屏幕中间、也不会变回 100%。
+        """
+        request_pure_skip()
+        log("已请网页跳过这张图")
+        return True
+
+    def set_pause_hold(self, on):
+        """桌面端就地暂停 / 恢复：小兔头顶的数字立刻冻住（不等网页那一下心跳）。"""
+        self._pause_hold = bool(on)
+        try:
+            if self._pause_hold:
+                self.timer_label = "已暂停"
+                self._ensure_band()          # 头顶留出圆盘的位置，别把小兔挤没了
+            else:
+                self.timer_label = ""
+            self._update_window_rect()
+            self.repaint()
+        except Exception:
+            log("set_pause_hold 重绘失败\n" + traceback_str())
+
+    def pause_now(self):
+        """暂停：小兔头顶立刻停 + 大图立刻蒙上「暂停中」+ 通知网页也停。"""
+        self.set_pause_hold(True)
+        pw = PURE_WIN
+        if pw is not None:
+            pw.set_pure_paused(True)
+        request_pure_pause(True)             # 网页最多 1 秒后跟着停（剩下的时间由网页冻住）
+        log("已暂停（~）")
+        return True
+
+    def resume_with_countdown(self):
+        """继续：先播「继续速写 → 3 → 2 → 1」，播完才让网页接着暂停前的计时。"""
+        pw = PURE_WIN
+        if pw is None or not pw.start_resume_countdown():
+            # 大图没在显示（在网页界面里练）：不用播动画，直接继续
+            self.set_pause_hold(False)
+            request_pure_pause(False)
+            log("已继续（无大图，直接走）")
+            return True
+        log("已继续（先播 3 2 1）")
+        return True
+
+    def toggle_pause(self):
+        """~ 键 / 右键菜单：暂停 ↔ 继续。
+
+        倒数到一半又按 ~ → 停掉动画回到暂停，不会两边状态打架。
+        """
+        pw = PURE_WIN
+        if pw is not None and pw._resume_step >= 0:
+            pw.cancel_resume()
+            return True
+        if self._pause_hold:
+            return self.resume_with_countdown()
+        return self.pause_now()
+
+    # -- 大图上的暂停蒙版 / 恢复动画 ------------------------------------
+    def set_pure_paused(self, on):
+        """在大图上蒙（或撤掉）那层 30% 黑 + 中间那行字。"""
+        self.pure_paused = bool(on)
+        self._resume_step = -1
+        self._resume_until = 0.0
+        try:
+            if self.hwnd:
+                user32.KillTimer(self.hwnd, self.resume_timer_id)
+        except Exception:
+            pass
+        try:
+            self.repaint()
+        except Exception:
+            log("刷新大图暂停蒙版失败\n" + traceback_str())
+
+    def start_resume_countdown(self):
+        """开始「继续速写 → 3 → 2 → 1」；播完自己会通知网页接着计时。
+
+        大图没在显示（比如现在正在看网页界面）就不播，返回 False 让调用方直接继续。
+        """
+        if not self.hwnd or not self.visible:
+            return False
+        self.pure_paused = False
+        self._resume_step = 0                       # 0 = 「继续速写」
+        self._resume_until = time.time() + PURE_RESUME_TEXT_SECS
+        try:
+            user32.SetTimer(self.hwnd, self.resume_timer_id, 100, None)
+        except Exception:
+            pass
+        try:
+            self.repaint()
+        except Exception:
+            log("开始恢复动画失败\n" + traceback_str())
+        return True
+
+    def cancel_resume(self):
+        """倒数到一半又按了 ~：停掉动画，回到暂停。"""
+        self._resume_step = -1
+        self._resume_until = 0.0
+        try:
+            if self.hwnd:
+                user32.KillTimer(self.hwnd, self.resume_timer_id)
+        except Exception:
+            pass
+        self.set_pure_paused(True)
+
+    def _resume_title(self):
+        if self._resume_step == 0:
+            return PURE_RESUME_TITLE, ""
+        return str(self._resume_step), "准备接着画"
+
+    def _tick_resume(self):
+        """推进恢复动画：继续速写 → 3 → 2 → 1 → 收工（这时才让网页接着计时）。"""
+        now = time.time()
+        if self._resume_step < 0 or now < self._resume_until:
+            return
+        if self._resume_step == 0:
+            self._resume_step = 3                              # 「继续速写」播完 → 进 3
+            self._resume_until = now + PURE_COUNTDOWN_SECS
+        elif self._resume_step > 1:
+            self._resume_step -= 1                             # 3 → 2 → 1
+            self._resume_until = now + PURE_COUNTDOWN_SECS
+        else:                                                  # 1 播完：收工
+            self._resume_step = -1
+            self._resume_until = 0.0
+            try:
+                if self.hwnd:
+                    user32.KillTimer(self.hwnd, self.resume_timer_id)
+            except Exception:
+                pass
+            set_pause_hold(False)        # 小兔头顶的数字重新跟着网页走
+            request_pure_pause(False)    # 网页接着「暂停前的那份时间」往下计时
+        try:
+            self.repaint()
+        except Exception:
+            log("恢复动画重绘失败\n" + traceback_str())
+
+    def _draw_pure_veil(self, canvas, title, sub="", veil=True):
+        """在大图正中写大字；veil=True 时先蒙一层 30% 黑（暂停中用）。
+
+        ⚠️ 文字必须按 textbbox 的偏移落笔（`x - bb[0]` / `y - bb[1]`）：
+        `draw.text((x, y), ...)` 的 (x,y) 是**行框**左上角，字形本身还要往下掉
+        十几像素（有 ascent 空隙）—— 底板按字形算、文字按行框画，看上去就是
+        「文字和黑框歪了」（2026-09-30 主人截图反馈的就是这个）。
+        底板一律 50% 透明黑、文字纯白，参考图明暗都看得清。
+        """
+        from PIL import Image, ImageDraw
+        W, H = canvas.size
+        canvas = canvas.convert("RGBA")
+        sc = max(1.0, self.scale)
+        if veil:
+            canvas = Image.alpha_composite(
+                canvas, Image.new("RGBA", (W, H), (0, 0, 0, PURE_PAUSE_VEIL)))
+        draw = ImageDraw.Draw(canvas)
+        box = (0, 0, 0, 128)                    # 50% 透明黑底
+
+        fs = int(round((130 if len(title) <= 2 else 52) * sc))
+        f = self._font_at(max(18, fs))
+        tbb = draw.textbbox((0, 0), title, font=f)
+        tw, th = tbb[2] - tbb[0], tbb[3] - tbb[1]
+        pad_t = int(round(26 * sc))
+        t_bw, t_bh = tw + pad_t * 2, th + pad_t * 2
+
+        f2 = None
+        sbb = None
+        s_bw = s_bh = pad_s = 0
+        gap = 0
+        if sub:
+            f2 = self._font_at(max(14, int(round(26 * sc))))
+            sbb = draw.textbbox((0, 0), sub, font=f2)
+            pad_s = int(round(15 * sc))
+            s_bw = (sbb[2] - sbb[0]) + pad_s * 2
+            s_bh = (sbb[3] - sbb[1]) + pad_s * 2
+            gap = int(round(14 * sc))
+
+        top = (H - (t_bh + (gap + s_bh if sub else 0))) // 2     # 整块居中
+        tx0 = (W - t_bw) // 2
+        draw.rounded_rectangle([tx0, top, tx0 + t_bw, top + t_bh],
+                               radius=int(round(24 * sc)), fill=box)
+        draw.text((tx0 + pad_t - tbb[0], top + pad_t - tbb[1]), title,
+                  fill=(255, 255, 255, 255), font=f)
+
+        if sub:
+            sy0 = top + t_bh + gap
+            sx0 = (W - s_bw) // 2
+            draw.rounded_rectangle([sx0, sy0, sx0 + s_bw, sy0 + s_bh],
+                                   radius=int(round(16 * sc)), fill=box)
+            draw.text((sx0 + pad_s - sbb[0], sy0 + pad_s - sbb[1]), sub,
+                      fill=(255, 255, 255, 255), font=f2)
+        return canvas
+
+    # -- 参考图模式里的两个快捷键（只在参考图模式注册，退出立刻注销）------
+    def _register_pure_hotkeys(self):
+        """注册 ~（暂停/继续）与 Ctrl+1（跳过这张图）。
+
+        ⚠️ 2026-09-30：以前那个 H 键就是因为「打字打不出 H」被删掉的，
+        所以这次**只在参考图模式里注册、退出立刻注销**（画速写时不打字），
+        并且不碰 H。~ 那个键位（ESC 下面、1 左边）连 Shift 一起也认。
+        """
+        if self._hk_on or not self.hwnd:
+            return
+        ok1 = bool(user32.RegisterHotKey(self.hwnd, HOTKEY_PAUSE_ID,
+                                         MOD_NOREPEAT, VK_OEM_3))
+        ok2 = bool(user32.RegisterHotKey(self.hwnd, HOTKEY_PAUSE_SHIFT_ID,
+                                         MOD_NOREPEAT | MOD_SHIFT, VK_OEM_3))
+        ok3 = bool(user32.RegisterHotKey(self.hwnd, HOTKEY_SKIP_ID,
+                                         MOD_NOREPEAT | MOD_CONTROL, VK_1))
+        self._hk_on = True
+        log("参考图模式快捷键：%s" % ("已注册" if (ok1 or ok2 or ok3) else "注册失败"))
+
+    # -- 大图上的操作提示：鼠标停够 0.3 秒浮出，几秒后自己收起来 ------
+    def _hover_hint_reset(self):
+        """鼠标动了一下：重新数 0.3 秒（正在显示时不打断，等它自己收）。"""
+        if self.kind != "pure" or self._hint_shown:
+            return
+        self._hint_deadline = time.time() + PURE_HINT_DELAY
+        try:
+            if self.hwnd:
+                user32.SetTimer(self.hwnd, self.hint_timer_id, 60, None)
+        except Exception:
+            pass
+
+    def _tick_pure_hint(self):
+        now = time.time()
+        if self._hint_shown:
+            if now >= self._hint_until:                 # 显示够了：收起来
+                self._hint_shown = False
+                self._hint_until = 0.0
+                try:
+                    user32.KillTimer(self.hwnd, self.hint_timer_id)
+                except Exception:
+                    pass
+                try:
+                    self.repaint()
+                except Exception:
+                    log("收起大图提示失败\n" + traceback_str())
+            return
+        if self._hint_deadline and now >= self._hint_deadline:
+            self._hint_deadline = 0.0
+            self._hint_shown = True
+            self._hint_until = now + PURE_HINT_SECS
+            try:
+                self.repaint()
+            except Exception:
+                log("显示大图提示失败\n" + traceback_str())
+
+    def _draw_pure_hint(self, canvas):
+        """在大图底部中间画一条半透明提示条（滚轮缩放 / Ctrl+1 跳过 / ~ 暂停）。"""
+        from PIL import ImageDraw
+        if self._font is None:
+            self._font = self._load_font()
+        W, H = canvas.size
+        sc = max(1.0, self.scale)
+        f = self._font_at(max(12, int(round(17 * sc))))
+        draw = ImageDraw.Draw(canvas)
+        pad = int(round(14 * sc))
+        gap = int(round(7 * sc))
+        sizes = []
+        for ln in PURE_HINT_LINES:
+            bb = draw.textbbox((0, 0), ln, font=f)
+            sizes.append((bb[2] - bb[0], bb[3] - bb[1]))
+        lh = max(s[1] for s in sizes) or int(round(20 * sc))
+        bw = min(W - 2 * pad, max(s[0] for s in sizes) + pad * 2)
+        bh = lh * len(PURE_HINT_LINES) + gap * (len(PURE_HINT_LINES) - 1) + pad * 2
+        if W < bw + 2 * pad or H < bh + 2 * pad:
+            return canvas                       # 图太小：不挤提示，免得挡住参考图
+        bx = (W - bw) // 2
+        by = H - bh - pad
+        bg = (24, 20, 34, 214)                  # 深紫夜色半透明（不刺眼）
+        edge = (127, 95, 192, 235)              # --pink #7f5fc0
+        draw.rounded_rectangle([bx, by, bx + bw, by + bh],
+                               radius=int(round(16 * sc)),
+                               fill=bg, outline=edge,
+                               width=max(2, int(round(2 * sc))))
+        ty = by + pad
+        for ln in PURE_HINT_LINES:
+            draw.text((bx + pad, ty), ln, fill=(240, 236, 252, 255), font=f)
+            ty += lh + gap
+        return canvas
+
+    def _unregister_pure_hotkeys(self):
+        """退出参考图模式：把两个快捷键还给系统（别抢走打字）。"""
+        if not self._hk_on:
+            return
+        self._hk_on = False
+        try:
+            user32.UnregisterHotKey(self.hwnd, HOTKEY_PAUSE_ID)
+            user32.UnregisterHotKey(self.hwnd, HOTKEY_PAUSE_SHIFT_ID)
+            user32.UnregisterHotKey(self.hwnd, HOTKEY_SKIP_ID)
+            log("参考图模式快捷键：已注销（~ / Ctrl+1 还给系统）")
+        except Exception:
+            pass
 
     def back_to_pure(self):
         """右键「返回当前参考图模式」：把刚才那张参考图的大窗再唤回来。
@@ -1938,6 +2411,8 @@ class PetWindow:
         margin = int(round(16 * self.scale))
         w, h = self._fit_pure_size(max(1, int(round(bw * self.zoom))),
                                    max(1, int(round(bh * self.zoom))), wa, margin)
+        set_pure_last_size(w, h)     # 记住实际显示的大小（等比夹取后的），下次回去看还这么大
+        set_pure_last_zoom(self.zoom)   # 记住缩放比例：跳下一张时沿用同一个倍率
         src = self._flip_source()
         self._pil = src.resize((w, h), Image.LANCZOS)
         self._pet_h = h
@@ -2036,7 +2511,13 @@ class PetWindow:
 
     def exit_pure(self, restore_page=True):
         """退出纯净模式：关掉大图窗口，小兔恢复常态；restore_page=True 唤回主界面。"""
+        if self.kind != "pure":
+            self._unregister_pure_hotkeys()  # 不在参考图模式了：~ 和 Ctrl+1 立刻还给系统
+            self._pause_hold = False         # 头顶的数字重新跟着网页走（网页自己还记着暂停状态）
         if self.kind == "pure":
+            self.pure_paused = False         # 收起大图：暂停蒙版 / 恢复动画一并复位
+            self._resume_step = -1
+            self._resume_until = 0.0
             self.hide()                      # 大图窗口自己隐藏即可
             self._pure_img = None
             self._pure_img_flip = None
@@ -2096,13 +2577,17 @@ class PetWindow:
                 self.create_raw()
             self._pure_img = img
             self._pure_img_flip = None       # 换了图：镜像缓存作废（翻转状态本身保留）
-            self.zoom = 1.0
             wa = self._work_area()
             max_w = int((wa.right - wa.left) * 0.46)
             max_h = int((wa.bottom - wa.top) * 0.62)
             r = min(max_w / float(img.size[0]), max_h / float(img.size[1]))
             self._pure_base = (max(1, int(round(img.size[0] * r))),
                                max(1, int(round(img.size[1] * r))))
+            # 沿用上一次的**缩放比例**（同一张图 → 位置和大小一模一样；
+            # 跳过换下一张 → 同一个倍率，等比缩放，绝不拉变形）。
+            z = pure_last_zoom()
+            self.zoom = max(self.PURE_ZOOM_MIN,
+                            min(self.PURE_ZOOM_MAX, z)) if z else 1.0
             self.pure = True
             self.band = 0
             self.bubble_kind = None
@@ -2140,7 +2625,12 @@ class PetWindow:
             left = -1
         self.timer_left = left
         self.timer_label = label or ""
+        self._timer_at = time.time()   # 网页还在推心跳 = 这一组还在练（右键「跳过这张图」据此显隐）
         # 计时圆盘长在头顶那条带子里：要显示就把带子留出来，不显示且没陪画就收回去
+        if self._pause_hold:
+            # 按了 ~（或右键暂停）：就地冻住，不等网页那一下心跳
+            left = self.timer_left
+            label = "已暂停"
         if left >= 0:
             self._ensure_band()
         elif not self.companion_on and self.bubble_kind is None:
@@ -2505,9 +2995,9 @@ class PetWindow:
     def _menu(self):
         hmenu = user32.CreatePopupMenu()
         if self.kind == "pure":
-            # 大图窗口只给这几项：另存为 / 翻转 / 唤回主界面 / 退出速写
-            # （纯净画面不放任何按钮，操作都走右键菜单；⚠️ 没有任何快捷键，
-            #  免得抢走打字时的按键）
+            # 大图窗口只给这几项：跳过 / 另存为 / 翻转 / 唤回主界面 / 退出速写
+            # （纯净画面不放任何按钮，操作都走右键菜单）
+            user32.AppendMenuW(hmenu, MF_STRING, 26, "跳过这张图\tCtrl+1")
             user32.AppendMenuW(hmenu, MF_STRING, 20, "图片另存为…")
             user32.AppendMenuW(hmenu, MF_STRING | (MF_CHECKED if self.flip_h else 0),
                                24, FLIP_MENU_TEXT)
@@ -2520,6 +3010,12 @@ class PetWindow:
         if self.pure:
             user32.AppendMenuW(hmenu, MF_STRING, 21, "显示主界面")
             user32.AppendMenuW(hmenu, MF_STRING, 22, "退出速写（回到主界面）")
+        # 这一组还在练（网页每秒推心跳）才显示：跳到下一张，大图位置/缩放都不变
+        if self.in_session():
+            user32.AppendMenuW(hmenu, MF_STRING, 26, "跳过这张图\tCtrl+1")
+            # 速写计时的时间段里一直有（不管现在是暂停还是正在画），文案跟着状态变
+            user32.AppendMenuW(hmenu, MF_STRING, 27,
+                               ("继续速写\t~" if self._pause_hold else "暂停速写\t~"))
         user32.AppendMenuW(hmenu, MF_STRING, 1, "打开速写页面")
         # 网页模式下（主界面开着）才显示：一键回到「只剩一张参考图」的纯净画面
         if not self.pure and self.has_pure_src():
@@ -2578,6 +3074,10 @@ class PetWindow:
             self.toggle_flip()           # 左右镜像参考图（只有右键菜单这一个入口）
         elif cmd == 25:
             self.back_to_pure()          # 网页模式 → 回到当前这张参考图的纯净画面
+        elif cmd == 26:
+            self.skip_current_ref()      # 跳到下一张（位置 / 缩放比例都不变）
+        elif cmd == 27:
+            self.toggle_pause()          # 暂停 / 继续（和 ~ 键同一套）
         elif cmd == 2:
             self.set_topmost(not self.topmost)
         elif cmd == 3:
@@ -2715,6 +3215,16 @@ class PetWindow:
                 self.drag_win = (r.left, r.top)
                 user32.SetCapture(hwnd)
                 return 0
+            if msg == WM_HOTKEY:
+                # 参考图模式里的两个键：~（暂停 / 继续）、Ctrl+1（跳过这张图）
+                # ⚠️ 只有真的在练的时候才响应，免得退出后还在抢按键
+                if self.pure or self.in_session():
+                    wid = int(wparam)
+                    if wid in (HOTKEY_PAUSE_ID, HOTKEY_PAUSE_SHIFT_ID):
+                        self.toggle_pause()
+                    elif wid == HOTKEY_SKIP_ID:
+                        self.skip_current_ref()
+                return 0
             if msg == WM_MOUSEMOVE:
                 if self.dragging:
                     pt = POINT()
@@ -2727,6 +3237,8 @@ class PetWindow:
                     self.base_y = self.y
                     user32.SetWindowPos(hwnd, None, self.x, self.y, 0, 0,
                                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+                else:
+                    self._hover_hint_reset()      # 大图上停够 0.3 秒 → 浮出操作提示
                 return 0
             if msg == WM_LBUTTONUP:
                 if self.dragging:
@@ -2768,6 +3280,12 @@ class PetWindow:
             if msg == WM_RBUTTONUP:
                 if not self.dragging:
                     self.show_menu()
+                return 0
+            if msg == WM_TIMER and wparam == self.resume_timer_id:
+                self._tick_resume()
+                return 0
+            if msg == WM_TIMER and wparam == self.hint_timer_id:
+                self._tick_pure_hint()
                 return 0
             if msg == WM_TIMER and wparam == self.timer_id:
                 self._tick_bubble()
